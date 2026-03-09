@@ -1,0 +1,679 @@
+// ============================================================
+// DATABASE SCHEMA - MAISA PRIMERIS APP
+// Format: DBML (dbdiagram.io)
+// Dibuat berdasarkan analisis frontend: 26 Feb 2026
+// ============================================================
+// Modul yang dicakup:
+//   1. Auth & User Management
+//   2. Project & Konstruksi
+//   3. Quality Control (QC)
+//   4. Finance & Accounting
+//   5. Marketing & Penjualan
+//   6. Housing (Kavling/Unit)
+//   7. Transaksi Legal (PPJB, Akad, BAST, Pindah Unit, Pembatalan)
+//   8. Absensi & Pengajuan Izin
+//   9. SOP & Logistik (Material, Gudang, Inventaris)
+// ============================================================
+
+// ============================================================
+// 1. AUTH & USER MANAGEMENT
+// ============================================================
+
+Table users {
+  id          uuid        [pk, default: `gen_random_uuid()`]
+  name        varchar(100) [not null]
+  email       varchar(150) [unique, not null]
+  password    varchar(255) [not null, note: 'bcrypt hashed']
+  role        varchar(30)  [not null, note: 'Super Admin | Finance | Project Management']
+  status      varchar(20)  [not null, default: 'Aktif', note: 'Aktif | Nonaktif']
+  last_login  timestamp
+  created_at  timestamp   [default: `now()`]
+  updated_at  timestamp   [default: `now()`]
+
+  Note: 'Tabel akun pengguna aplikasi'
+}
+
+Table activity_logs {
+  id          uuid        [pk, default: `gen_random_uuid()`]
+  user_id     uuid        [not null, ref: > users.id]
+  action      varchar(150) [not null, note: 'e.g. Update Progres Konstruksi, Input Pembayaran Unit']
+  target      varchar(200) [note: 'entitas / record yang diubah']
+  ip_address  varchar(50)
+  device_info varchar(200)
+  created_at  timestamp   [default: `now()`]
+
+  Note: 'Audit trail seluruh aktivitas user'
+}
+
+
+// ============================================================
+// 2. PROJECT & KONSTRUKSI
+// ============================================================
+
+Table projects {
+  id                  uuid        [pk, default: `gen_random_uuid()`]
+  name                varchar(150) [not null]
+  type                varchar(20)  [not null, note: 'cluster | standalone']
+  location            varchar(200)
+  units_count         int          [default: 0]
+  progress            int          [default: 0, note: '0-100 persen']
+  status              varchar(30)  [not null, note: 'On Progress | Completed | Delayed']
+  deadline            varchar(50)  [note: 'e.g. Dec 2026']
+  lead                varchar(100) [note: 'Nama penanggung jawab']
+  qc_template_id      uuid         [ref: > qc_templates.id, note: 'Untuk standalone building']
+  construction_status varchar(100) [note: 'Status konstruksi khusus standalone']
+  created_at          timestamp    [default: `now()`]
+  updated_at          timestamp    [default: `now()`]
+
+  Note: 'Proyek konstruksi (cluster atau standalone building)'
+}
+
+Table construction_statuses {
+  id       uuid        [pk, default: `gen_random_uuid()`]
+  name     varchar(100) [not null]
+  progress int          [note: 'Nilai progres default 0-100']
+  color    varchar(100) [note: 'Tailwind color class e.g. bg-blue-50 text-blue-600']
+  order    int          [default: 0, note: 'Urutan tampil']
+
+  Note: 'Master data status konstruksi yang bisa dikonfigurasi'
+}
+
+Table project_units {
+  id              uuid        [pk, default: `gen_random_uuid()`]
+  project_id      uuid        [not null, ref: > projects.id]
+  no              varchar(20)  [not null, note: 'e.g. A-01']
+  tipe            varchar(50)  [note: 'e.g. Tipe 36, Tipe 45']
+  progress        int          [default: 0, note: '0-100 persen']
+  status          varchar(100) [note: 'Referensi ke construction_statuses.name']
+  qc_status       varchar(20)  [note: 'Pass | Fail | Ongoing']
+  qc_readiness    int          [default: 0, note: '0-100 persen']
+  qc_template_id  uuid         [ref: > qc_templates.id]
+  created_at      timestamp    [default: `now()`]
+  updated_at      timestamp    [default: `now()`]
+
+  Note: 'Unit dalam sebuah cluster/proyek'
+}
+
+Table time_schedule_items {
+  id                uuid        [pk, default: `gen_random_uuid()`]
+  ref_id            uuid        [not null, note: 'Bisa project_id (standalone) atau project_unit_id (cluster)']
+  ref_type          varchar(20)  [not null, note: 'project | unit']
+  urutan            int
+  uraian_pekerjaan  varchar(255) [not null]
+  biaya             bigint       [default: 0]
+  bobot             decimal(6,3) [default: 0]
+  elevasi           varchar(20)
+  // Minggu per bulan (JSON atau kolom terpisah)
+  // Disimpan sebagai JSON untuk fleksibilitas
+  bulan1            jsonb        [note: '{ minggu1, minggu2, minggu3, minggu4 }']
+  bulan2            jsonb
+  bulan3            jsonb
+  bulan4            jsonb
+  keterangan        text
+
+  Note: 'Rencana jadwal pekerjaan tiap item (time schedule/kurva S)'
+}
+
+Table inventory_logs {
+  id          uuid        [pk, default: `gen_random_uuid()`]
+  project_id  uuid        [not null, ref: > projects.id]
+  unit_no     varchar(20)
+  date        date        [not null]
+  item        varchar(200) [not null]
+  qty         int
+  unit_satuan varchar(30)
+  type        varchar(10)  [not null, note: 'in | out']
+  person      varchar(100)
+  created_at  timestamp   [default: `now()`]
+
+  Note: 'Log masuk keluar material per proyek/unit'
+}
+
+Table work_logs {
+  id              uuid        [pk, default: `gen_random_uuid()`]
+  project_id      uuid        [not null, ref: > projects.id]
+  date            date        [not null]
+  unit_no         varchar(20)
+  activity        text        [not null]
+  worker_count    int         [default: 0]
+  progress_added  decimal(5,2)
+  status          varchar(20)  [note: 'Normal | Lembur | Kendala']
+  weather         varchar(30)  [note: 'Cerah | Berawan | Hujan | Hujan Lebat']
+  created_at      timestamp    [default: `now()`]
+
+  Note: 'Log harian pekerjaan di lapangan'
+}
+
+Table work_log_photos {
+  id          uuid   [pk, default: `gen_random_uuid()`]
+  work_log_id uuid   [not null, ref: > work_logs.id]
+  photo_url   varchar(500) [not null]
+  created_at  timestamp [default: `now()`]
+
+  Note: 'Foto dokumentasi lapangan per log pekerjaan'
+}
+
+
+// ============================================================
+// 3. QUALITY CONTROL (QC)
+// ============================================================
+
+Table qc_templates {
+  id          uuid        [pk, default: `gen_random_uuid()`]
+  name        varchar(150) [not null]
+  description text
+  unit_type   varchar(100) [note: 'e.g. Tipe 36, Tipe 45, All, Standalone Building']
+  created_at  timestamp   [default: `now()`]
+  updated_at  timestamp   [default: `now()`]
+
+  Note: 'Template checklist QC yang bisa dikonfigurasi per tipe unit'
+}
+
+Table qc_template_sections {
+  id          uuid        [pk, default: `gen_random_uuid()`]
+  template_id uuid        [not null, ref: > qc_templates.id]
+  title       varchar(200) [not null, note: 'e.g. A. PEKERJAAN PERSIAPAN']
+  order       int         [default: 0]
+
+  Note: 'Seksi/kelompok dalam template QC'
+}
+
+Table qc_template_items {
+  id          uuid        [pk, default: `gen_random_uuid()`]
+  section_id  uuid        [not null, ref: > qc_template_sections.id]
+  description varchar(300) [not null]
+  category    varchar(100)
+  order       int         [default: 0]
+
+  Note: 'Item checklist dalam seksi template QC'
+}
+
+Table qc_submissions {
+  id              uuid        [pk, default: `gen_random_uuid()`]
+  project_id      uuid        [not null, ref: > projects.id]
+  unit_no         varchar(20)  [not null]
+  template_id     uuid         [ref: > qc_templates.id]
+  inspector_id    uuid         [ref: > users.id]
+  inspector_name  varchar(100)
+  date            date        [not null]
+  status          varchar(20)  [not null, note: 'Draft | Submitted']
+  ok_count        int          [default: 0]
+  not_ok_count    int          [default: 0]
+  total_items     int          [default: 0]
+  created_at      timestamp    [default: `now()`]
+  updated_at      timestamp    [default: `now()`]
+
+  Note: 'Hasil pengisian checklist QC per unit'
+}
+
+Table qc_submission_results {
+  id              uuid        [pk, default: `gen_random_uuid()`]
+  submission_id   uuid        [not null, ref: > qc_submissions.id]
+  template_item_id uuid       [ref: > qc_template_items.id]
+  item_description varchar(300)
+  section_title   varchar(200)
+  status          varchar(10)  [note: 'OK | NOT OK | null']
+  photo_url       varchar(500)
+  remarks         text
+  created_at      timestamp   [default: `now()`]
+
+  Note: 'Hasil per item checklist dalam sebuah submission QC'
+}
+
+
+// ============================================================
+// 4. FINANCE & ACCOUNTING
+// ============================================================
+
+Table transactions {
+  id          uuid        [pk, default: `gen_random_uuid()`]
+  trx_code    varchar(30)  [unique, note: 'e.g. TRX001']
+  date        date        [not null]
+  description varchar(300) [not null]
+  category    varchar(50)  [not null, note: 'Sales | Material | Labor | Operation | Marketing']
+  amount      bigint       [not null]
+  type        varchar(5)   [not null, note: 'in | out']
+  unit_blok   varchar(30)  [note: 'Blok unit terkait jika ada, e.g. A-01']
+  no_rekening varchar(50)
+  created_by  uuid         [ref: > users.id]
+  created_at  timestamp   [default: `now()`]
+  updated_at  timestamp   [default: `now()`]
+
+  Note: 'Semua transaksi keuangan (dana masuk & dana keluar)'
+}
+
+Table consumers {
+  id                  uuid        [pk, default: `gen_random_uuid()`]
+  nama                varchar(150) [not null]
+  blok                varchar(30)  [not null, note: 'e.g. Block D3, A-01']
+  tipe                varchar(50)  [note: 'e.g. 80/126, 36/72']
+  harga               bigint       [not null]
+  keterangan_utama    varchar(100) [note: 'Cash Bertahap | KPR Bank | Cash Keras']
+  created_at          timestamp   [default: `now()`]
+  updated_at          timestamp   [default: `now()`]
+
+  Note: 'Data konsumen/pembeli unit (piutang)'
+}
+
+Table payment_histories {
+  id          uuid        [pk, default: `gen_random_uuid()`]
+  consumer_id uuid        [not null, ref: > consumers.id]
+  tanggal     date        [not null]
+  transaksi   varchar(150) [not null, note: 'e.g. Booking, Down Payment, Angsuran']
+  debit       bigint       [default: 0]
+  kredit      bigint       [default: 0]
+  sisa        bigint       [default: 0]
+  estimasi    date         [note: 'Tanggal estimasi pembayaran berikutnya']
+  keterangan  varchar(200)
+  created_at  timestamp   [default: `now()`]
+
+  Note: 'Riwayat transaksi pembayaran per konsumen (piutang)'
+}
+
+
+// ============================================================
+// 5. MARKETING & PENJUALAN
+// ============================================================
+
+Table leads {
+  id                uuid        [pk, default: `gen_random_uuid()`]
+  lead_code         varchar(20)  [unique, note: 'e.g. LD-001']
+  name              varchar(150) [not null]
+  phone             varchar(30)  [not null]
+  email             varchar(150)
+  status            varchar(20)  [not null, note: 'Cold | Warm | Hot | Closed | Lost']
+  interest          varchar(100) [note: 'Unit yang diminati, e.g. A-12']
+  source            varchar(100) [note: 'Facebook Ads | Walk-in | Referral | Instagram | Website']
+  date              date
+  notes             text
+  marketing_id      uuid         [ref: > marketing_persons.id]
+  created_at        timestamp   [default: `now()`]
+  updated_at        timestamp   [default: `now()`]
+
+  Note: 'Data prospek/calon pembeli dari marketing'
+}
+
+Table marketing_persons {
+  id              uuid        [pk, default: `gen_random_uuid()`]
+  marketing_code  varchar(20)  [unique, note: 'e.g. MKT-001']
+  name            varchar(150) [not null]
+  address         text
+  gender          varchar(20)  [note: 'Laki-laki | Perempuan']
+  job             varchar(100)
+  phone           varchar(30)
+  photo_url       varchar(500)
+  status          varchar(20)  [not null, note: 'Aktif | Tidak Aktif']
+  type            varchar(30)  [not null, note: 'Marketing Offline | Marketing Freelance']
+  bank_name       varchar(100)
+  bank_account    varchar(50)
+  account_name    varchar(150)
+  leads_count     int          [default: 0]
+  closed_deals    int          [default: 0]
+  created_at      timestamp   [default: `now()`]
+  updated_at      timestamp   [default: `now()`]
+
+  Note: 'Data tim marketing (internal & freelance)'
+}
+
+Table unit_statuses {
+  id          uuid        [pk, default: `gen_random_uuid()`]
+  unit_no     varchar(20)  [not null, note: 'e.g. A-01, B-12']
+  cluster     varchar(100)
+  status      varchar(20)  [not null, note: 'Tersedia | Booking | Sold Out']
+  buyer       varchar(150)
+  price       bigint
+  updated_at  timestamp   [default: `now()`]
+
+  Note: 'Status ketersediaan unit untuk peta siteplan marketing'
+}
+
+
+// ============================================================
+// 6. HOUSING (KAVLING / UNIT DETAIL)
+// ============================================================
+
+Table housing_units {
+  id                uuid        [pk, default: `gen_random_uuid()`]
+  no                varchar(20)  [unique, not null, note: 'e.g. A-01']
+  tipe              varchar(100) [note: 'e.g. Emerald (36/60), Ruby (45/72)']
+  luas_tanah        decimal(8,2)
+  luas_bangunan     decimal(8,2)
+  harga             bigint
+  status            varchar(20)  [not null, note: 'Available | Booking | Sold']
+  panjang_kanan     decimal(7,2)
+  panjang_kiri      decimal(7,2)
+  lebar_depan       decimal(7,2)
+  lebar_belakang    decimal(7,2)
+  harga_per_meter   bigint
+  daya_listrik      int          [note: 'VA, e.g. 2200, 3500, 5500']
+  id_rumah          varchar(20)
+  nomor_sertipikat  varchar(100)
+  keterangan        text
+  foto_url          varchar(500)
+  created_at        timestamp   [default: `now()`]
+  updated_at        timestamp   [default: `now()`]
+
+  Note: 'Data detail kavling/unit perumahan'
+}
+
+Table housing_payment_histories {
+  id              uuid        [pk, default: `gen_random_uuid()`]
+  housing_unit_id uuid        [not null, ref: > housing_units.id]
+  date            date        [not null]
+  amount          bigint      [not null]
+  method          varchar(100) [note: 'e.g. Booking Fee, DP 1, Angsuran KPR']
+  status          varchar(20)  [note: 'Paid | Pending']
+  created_at      timestamp   [default: `now()`]
+
+  Note: 'Riwayat pembayaran per unit kavling'
+}
+
+
+// ============================================================
+// 7. TRANSAKSI LEGAL
+// ============================================================
+
+Table ppjb {
+  id                uuid        [pk, default: `gen_random_uuid()`]
+  no                varchar(60)  [unique, not null, note: 'e.g. PPJB/ONV-MAI/01/2026']
+  date              date        [not null]
+  customer_name     varchar(150) [not null]
+  no_ktp            varchar(30)  [not null]
+  jenis_kelamin     varchar(20)
+  tempat_lahir      varchar(100)
+  tanggal_lahir     date
+  domisili          varchar(200)
+  alamat_ktp        text
+  pekerjaan         varchar(100)
+  warga_negara      varchar(50)
+  no_telp           varchar(30)
+  email             varchar(150)
+  lokasi_rumah      varchar(100) [note: 'e.g. Unit A-01']
+  kluster_blok      varchar(100)
+  tipe_rumah        varchar(50)
+  luas_tanah        varchar(20)
+  luas_bangunan     varchar(20)
+  daya_listrik      varchar(20)  [note: 'e.g. 2200 VA']
+  harga_jual        bigint
+  nominal_lpj       bigint
+  down_payment      bigint
+  sisa_pembayaran   bigint
+  nomor_sertifikat  varchar(100)
+  ppjb_file_url     varchar(500)
+  tatib_file_url    varchar(500)
+  created_at        timestamp   [default: `now()`]
+  updated_at        timestamp   [default: `now()`]
+
+  Note: 'Perjanjian Pengikatan Jual Beli'
+}
+
+Table akad {
+  id              uuid        [pk, default: `gen_random_uuid()`]
+  no              varchar(60)  [unique, not null, note: 'e.g. AKD/001/2026']
+  date            date        [not null]
+  hari            varchar(20)
+  customer_name   varchar(150) [not null]
+  no_ktp          varchar(30)  [not null]
+  alamat_ktp      text
+  kluster_blok    varchar(100)
+  tipe_rumah      varchar(50)
+  luas_tanah      varchar(20)
+  luas_bangunan   varchar(20)
+  notaris         varchar(200)
+  catatan         text
+  created_at      timestamp   [default: `now()`]
+  updated_at      timestamp   [default: `now()`]
+
+  Note: 'Data akad jual beli (notaris)'
+}
+
+Table bast {
+  id                uuid        [pk, default: `gen_random_uuid()`]
+  no                varchar(60)  [unique, not null, note: 'e.g. BAST/001/2026']
+  date              date        [not null]
+  hari              varchar(20)
+  customer_name     varchar(150) [not null]
+  no_ktp            varchar(30)  [not null]
+  jenis_kelamin     varchar(20)
+  tempat_lahir      varchar(100)
+  tanggal_lahir     date
+  domisili          varchar(200)
+  alamat_ktp        text
+  pekerjaan         varchar(100)
+  no_telp           varchar(30)
+  email             varchar(150)
+  no_npwp           varchar(30)
+  lokasi_rumah      varchar(100)
+  kluster_blok      varchar(100)
+  tipe_rumah        varchar(50)
+  luas_tanah        varchar(20)
+  luas_bangunan     varchar(20)
+  daya_listrik      varchar(20)
+  nomor_sertifikat  varchar(100)
+  id_sikumbang      varchar(100)
+  bast_file_url     varchar(500)
+  created_at        timestamp   [default: `now()`]
+  updated_at        timestamp   [default: `now()`]
+
+  Note: 'Berita Acara Serah Terima unit'
+}
+
+Table pindah_unit {
+  id                uuid        [pk, default: `gen_random_uuid()`]
+  no                varchar(60)  [unique, not null]
+  date              date        [not null]
+  customer_name     varchar(150) [not null]
+  nik               varchar(30)
+  alamat            text
+  lokasi_kav_lama   varchar(100)
+  nominal_utj       bigint
+  lokasi_kav_baru   varchar(100)
+  keterangan        text
+  created_at        timestamp   [default: `now()`]
+  updated_at        timestamp   [default: `now()`]
+
+  Note: 'Formulir pengajuan pindah unit oleh konsumen'
+}
+
+Table pembatalan {
+  id                uuid        [pk, default: `gen_random_uuid()`]
+  no                varchar(60)  [unique, not null]
+  date              date        [not null]
+  customer_name     varchar(150) [not null]
+  nik               varchar(30)
+  alamat            text
+  lokasi_kav_lama   varchar(100)
+  nominal_utj       bigint
+  keterangan        text
+  nama_bank         varchar(100)
+  no_rekening       varchar(50)
+  atas_nama         varchar(150)
+  created_at        timestamp   [default: `now()`]
+  updated_at        timestamp   [default: `now()`]
+
+  Note: 'Formulir pembatalan pembelian unit'
+}
+
+
+// ============================================================
+// 8. ABSENSI & PENGAJUAN IZIN
+// ============================================================
+
+Table work_locations {
+  id        uuid        [pk, default: `gen_random_uuid()`]
+  name      varchar(150) [not null]
+  address   text
+  radius    int          [note: 'Radius absensi dalam meter']
+  lat       decimal(10,7)
+  lng       decimal(10,7)
+  created_at timestamp  [default: `now()`]
+  updated_at timestamp  [default: `now()`]
+
+  Note: 'Master titik lokasi absensi (kantor, site proyek, dll)'
+}
+
+Table user_location_assignments {
+  id              uuid   [pk, default: `gen_random_uuid()`]
+  user_id         uuid   [not null, ref: > users.id]
+  work_location_id uuid  [not null, ref: > work_locations.id]
+
+  Note: 'Mapping user ke lokasi absensi yang ditetapkan'
+}
+
+Table attendances {
+  id                uuid        [pk, default: `gen_random_uuid()`]
+  user_id           uuid        [not null, ref: > users.id]
+  work_location_id  uuid        [ref: > work_locations.id]
+  date              date        [not null]
+  clock_in          time
+  clock_out         time
+  lat_in            decimal(10,7)
+  lng_in            decimal(10,7)
+  lat_out           decimal(10,7)
+  lng_out           decimal(10,7)
+  is_location_valid boolean     [default: false]
+  status            varchar(20)  [note: 'Hadir | Terlambat | Setengah Hari | Izin | Sakit | Absen']
+  created_at        timestamp   [default: `now()`]
+
+  Note: 'Rekap kehadiran harian karyawan'
+}
+
+Table leave_requests {
+  id          uuid        [pk, default: `gen_random_uuid()`]
+  user_id     uuid        [not null, ref: > users.id]
+  type        varchar(30)  [not null, note: 'Cuti | Sakit | Izin Khusus']
+  duration    int          [note: 'Jumlah hari']
+  start_date  date        [not null]
+  end_date    date
+  note        text
+  status      varchar(20)  [not null, note: 'Pending | Approved | Rejected']
+  approved_by uuid         [ref: > users.id]
+  approved_at timestamp
+  created_at  timestamp   [default: `now()`]
+
+  Note: 'Pengajuan cuti/izin/sakit karyawan'
+}
+
+
+// ============================================================
+// 9. SOP & LOGISTIK MATERIAL
+// ============================================================
+
+Table permintaan_material {
+  id            uuid        [pk, default: `gen_random_uuid()`]
+  no_form       varchar(30)  [unique, not null, note: 'e.g. PM-2026-001']
+  tanggal       date        [not null]
+  divisi        varchar(100)
+  nama_peminta  varchar(150)
+  status        varchar(20)  [not null, note: 'Pending | Disetujui | Ditolak | Selesai']
+  disetujui     varchar(150)
+  diperiksa     varchar(150)
+  created_at    timestamp   [default: `now()`]
+
+  Note: 'Form permintaan material dari lapangan ke gudang'
+}
+
+Table permintaan_material_items {
+  id                    uuid        [pk, default: `gen_random_uuid()`]
+  permintaan_id         uuid        [not null, ref: > permintaan_material.id]
+  nama_barang           varchar(200) [not null]
+  qty                   int         [not null]
+  satuan                varchar(30)
+  keterangan            text
+
+  Note: 'Item dalam form permintaan material'
+}
+
+Table tanda_terima_gudang {
+  id          uuid        [pk, default: `gen_random_uuid()`]
+  no_terima   varchar(30)  [unique, not null, note: 'e.g. TTG-2026-001']
+  tanggal     date        [not null]
+  supplier    varchar(150)
+  penerima    varchar(150)
+  status      varchar(20)  [not null, note: 'Draft | Verified | Completed']
+  created_at  timestamp   [default: `now()`]
+
+  Note: 'Form tanda terima barang dari supplier ke gudang'
+}
+
+Table tanda_terima_gudang_items {
+  id              uuid        [pk, default: `gen_random_uuid()`]
+  tanda_terima_id uuid        [not null, ref: > tanda_terima_gudang.id]
+  nama_barang     varchar(200) [not null]
+  qty             int         [not null]
+  satuan          varchar(30)
+  kondisi         varchar(50)  [note: 'Baik | Rusak Ringan | dll']
+
+  Note: 'Item dalam tanda terima gudang'
+}
+
+Table barang_keluar {
+  id          uuid        [pk, default: `gen_random_uuid()`]
+  no_form     varchar(30)  [unique, not null, note: 'e.g. BK-2026-001']
+  tanggal     date        [not null]
+  tujuan      varchar(200)
+  penerima    varchar(150)
+  project     varchar(150)
+  status      varchar(20)  [not null, note: 'Diproses | Dikirim | Diterima']
+  created_at  timestamp   [default: `now()`]
+
+  Note: 'Form pengeluaran barang dari gudang ke lapangan'
+}
+
+Table barang_keluar_items {
+  id              uuid        [pk, default: `gen_random_uuid()`]
+  barang_keluar_id uuid       [not null, ref: > barang_keluar.id]
+  nama_barang     varchar(200) [not null]
+  qty             int         [not null]
+  satuan          varchar(30)
+  keterangan      text
+
+  Note: 'Item dalam form barang keluar'
+}
+
+Table inventaris_lapangan {
+  id                uuid        [pk, default: `gen_random_uuid()`]
+  kode              varchar(50)  [unique]
+  nama_barang       varchar(200) [not null]
+  kategori          varchar(100)
+  lokasi            varchar(200)
+  kondisi           varchar(30)  [not null, note: 'Baik | Rusak Ringan | Rusak Berat']
+  qty               int         [not null]
+  satuan            varchar(30)
+  tanggal_catat     date
+  penanggung_jawab  varchar(150)
+  created_at        timestamp   [default: `now()`]
+  updated_at        timestamp   [default: `now()`]
+
+  Note: 'Inventaris alat dan barang di lapangan'
+}
+
+Table surat_jalan {
+  id                uuid        [pk, default: `gen_random_uuid()`]
+  nomor_surat       varchar(60)  [unique, not null]
+  tanggal           date        [not null]
+  nomor_po          varchar(60)
+  kepada            varchar(200)
+  dikirim_dengan    varchar(100) [note: 'Jenis kendaraan']
+  no_polisi         varchar(20)
+  nama_pengemudi    varchar(150)
+  tanda_terima      varchar(150)
+  pengemudi         varchar(150)
+  mengetahui        varchar(150)
+  total_barang      int         [default: 0]
+  status            varchar(30)  [not null, note: 'Dalam Perjalanan | Sampai Tujuan | Selesai']
+  created_at        timestamp   [default: `now()`]
+
+  Note: 'Surat jalan pengiriman barang'
+}
+
+Table surat_jalan_items {
+  id              uuid        [pk, default: `gen_random_uuid()`]
+  surat_jalan_id  uuid        [not null, ref: > surat_jalan.id]
+  nama_barang     varchar(200) [not null]
+  satuan          varchar(30)
+  jumlah          int         [not null]
+  keterangan      text
+
+  Note: 'Item dalam surat jalan'
+}

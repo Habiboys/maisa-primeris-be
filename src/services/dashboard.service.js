@@ -1,0 +1,93 @@
+'use strict';
+
+const { Op, fn, col, literal, QueryTypes } = require('sequelize');
+const sequelize = require('../models').sequelize;
+const {
+  Transaction, HousingUnit, Consumer, Lead, Attendance,
+} = require('../models');
+
+module.exports = {
+  // ── KPI Summary ───────────────────────────────────────────────
+  getSummary: async () => {
+    const [totalUnit, unitTerjual, unitProgres] = await Promise.all([
+      HousingUnit.count(),
+      HousingUnit.count({ where: { status: 'Sold' } }),
+      HousingUnit.count({ where: { status: 'Proses' } }),
+    ]);
+    const pendapatan = await Transaction.sum('amount', { where: { type: 'Pemasukan' } }) || 0;
+    const unit_kritis = Math.max(0, totalUnit - unitTerjual - unitProgres);
+
+    return {
+      total_unit            : totalUnit,
+      unit_terjual          : unitTerjual,
+      unit_progres          : unitProgres,
+      pendapatan,
+      target_penjualan_pct  : totalUnit > 0 ? Math.round((unitTerjual / totalUnit) * 100) : 0,
+      unit_kritis,
+    };
+  },
+
+  // ── Cashflow (6 atau N bulan terakhir) ────────────────────────
+  getCashflow: async (months = 6) => {
+    const n = Math.min(parseInt(months, 10) || 6, 24);
+    const results = [];
+    const now = new Date();
+
+    for (let i = n - 1; i >= 0; i--) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const from = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`;
+      const lastDay = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
+      const to   = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${lastDay}`;
+
+      const [masuk, keluar] = await Promise.all([
+        Transaction.sum('amount', { where: { type: 'Pemasukan',    transaction_date: { [Op.between]: [from, to] } } }),
+        Transaction.sum('amount', { where: { type: 'Pengeluaran',  transaction_date: { [Op.between]: [from, to] } } }),
+      ]);
+
+      results.push({
+        month  : d.toLocaleString('id-ID', { month: 'short' }),
+        masuk  : masuk  || 0,
+        keluar : keluar || 0,
+      });
+    }
+    return results;
+  },
+
+  // ── Sales Distribution ────────────────────────────────────────
+  getSalesDistribution: async () => {
+    const rows = await HousingUnit.findAll({
+      attributes: ['status', [fn('COUNT', col('id')), 'count']],
+      group: ['status'],
+      raw: true,
+    });
+    return rows.map(r => ({ status: r.status, count: parseInt(r.count, 10) }));
+  },
+
+  // ── Construction Progress (dummy per-phase) ───────────────────
+  getConstructionProgress: async () => {
+    const total = await HousingUnit.count();
+    if (total === 0) return [];
+    // Buat estimasi progress per fase dari data yang ada
+    const sold    = await HousingUnit.count({ where: { status: 'Sold' } });
+    const proses  = await HousingUnit.count({ where: { status: 'Proses' } });
+    const avail   = await HousingUnit.count({ where: { status: 'Tersedia' } });
+
+    return [
+      { phase: 'Pondasi',         target: total,                  actual: Math.round(sold * 1.2 + proses) },
+      { phase: 'Struktur',        target: Math.round(total * 0.9), actual: sold + Math.round(proses * 0.8) },
+      { phase: 'Finishing',       target: Math.round(total * 0.7), actual: sold },
+      { phase: 'Serah Terima',    target: Math.round(total * 0.5), actual: sold },
+    ].map(r => ({ ...r, actual: Math.min(r.actual, r.target) }));
+  },
+
+  // ── Budget vs Actual ──────────────────────────────────────────
+  getBudgetVsActual: async () => {
+    const months = 6;
+    const rows = await module.exports.getCashflow(months);
+    return rows.map(r => ({
+      month : r.month,
+      budget: Math.round(r.keluar * 1.1),  // asumsi budget 10% di atas realisasi
+      actual: r.keluar,
+    }));
+  },
+};
