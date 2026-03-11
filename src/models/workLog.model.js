@@ -21,10 +21,6 @@ module.exports = (sequelize, DataTypes) => {
     progress_added: { type: DataTypes.DECIMAL(5,2), defaultValue: 0 },
     status        : { type: DataTypes.ENUM('Normal','Lembur','Kendala'), defaultValue: 'Normal' },
     weather       : DataTypes.STRING(50),
-    // legacy fields retained for backward compatibility
-    work_date     : DataTypes.DATEONLY,
-    description   : DataTypes.TEXT,
-    workers       : DataTypes.INTEGER,
   }, { sequelize, modelName: 'WorkLog', tableName: 'work_logs', underscored: true });
   return WorkLog;
 };

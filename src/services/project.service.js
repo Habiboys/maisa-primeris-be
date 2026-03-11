@@ -29,6 +29,36 @@ const ensureUploadDir = (dir) => {
   }
 };
 
+/**
+ * Recalculate and persist project.progress:
+ * - cluster   : average of all unit progress values
+ * - standalone: progress from the matching ConstructionStatus row
+ */
+const recalculateProjectProgress = async (projectId) => {
+  const project = await Project.findByPk(projectId);
+  if (!project) return;
+
+  let newProgress = project.progress ?? 0;
+
+  if (project.type === 'cluster') {
+    const units = await ProjectUnit.findAll({ where: { project_id: projectId } });
+    if (units.length > 0) {
+      const total = units.reduce((sum, u) => sum + (u.progress ?? 0), 0);
+      newProgress = Math.round(total / units.length);
+    } else {
+      newProgress = 0;
+    }
+  } else {
+    // standalone — derive from construction_status name
+    if (project.construction_status) {
+      const cs = await ConstructionStatus.findOne({ where: { name: project.construction_status } });
+      if (cs) newProgress = cs.progress ?? 0;
+    }
+  }
+
+  await project.update({ progress: newProgress });
+};
+
 module.exports = {
   // ── Projects ──────────────────────────────────────────────
   listProjects: async ({ search, type, status, page, limit } = {}) => {
@@ -58,6 +88,10 @@ module.exports = {
     const p = await Project.findByPk(id);
     if (!p) throw { message: "Proyek tidak ditemukan", status: 404 };
     await p.update(payload);
+    // If construction_status changed on a standalone project, sync progress
+    if (payload.construction_status !== undefined && p.type === 'standalone') {
+      await recalculateProjectProgress(id);
+    }
     return p;
   },
 
@@ -78,12 +112,17 @@ module.exports = {
     return u;
   },
 
-  createUnit: (projectId, payload) => ProjectUnit.create({ ...payload, project_id: projectId }),
+  createUnit: async (projectId, payload) => {
+    const unit = await ProjectUnit.create({ ...payload, project_id: projectId });
+    await recalculateProjectProgress(projectId);
+    return unit;
+  },
 
   updateUnit: async (projectId, unitNo, payload) => {
     const u = await ProjectUnit.findOne({ where: { project_id: projectId, no: unitNo } });
     if (!u) throw { message: "Unit tidak ditemukan", status: 404 };
     await u.update(payload);
+    await recalculateProjectProgress(projectId);
     return u;
   },
 
@@ -91,6 +130,7 @@ module.exports = {
     const u = await ProjectUnit.findOne({ where: { project_id: projectId, no: unitNo } });
     if (!u) throw { message: "Unit tidak ditemukan", status: 404 };
     await u.destroy();
+    await recalculateProjectProgress(projectId);
   },
 
   // ── Construction Statuses ──────────────────────────────────

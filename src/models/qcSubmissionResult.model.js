@@ -13,7 +13,7 @@ module.exports = (sequelize, DataTypes) => {
     item_id      : DataTypes.UUID,
     result       : DataTypes.ENUM('OK','Not OK','N/A'),
     notes        : DataTypes.TEXT,
-    photo_url    : DataTypes.STRING(255),
+    photo_url    : DataTypes.TEXT('medium'),
   }, { sequelize, modelName: 'QcSubmissionResult', tableName: 'qc_submission_results', underscored: true });
   return QcSubmissionResult;
 };

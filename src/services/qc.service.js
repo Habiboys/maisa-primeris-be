@@ -40,7 +40,9 @@ const includeTemplateTree = [
 
 const findUnitByNo = async (projectId, unitNo) => {
   if (!unitNo) return null;
-  return ProjectUnit.findOne({ where: { project_id: projectId, no: unitNo } });
+  const where = { no: unitNo };
+  if (projectId) where.project_id = projectId;
+  return ProjectUnit.findOne({ where });
 };
 
 const svc = {
@@ -249,7 +251,7 @@ const svc = {
   createSubmission: async (payload, userId) => {
     const unit = payload.unit_id ? await ProjectUnit.findByPk(payload.unit_id) : await findUnitByNo(payload.project_id, payload.unit_no);
     if (payload.unit_id && !unit) throw { message: "Unit tidak ditemukan", status: 404 };
-    if (payload.unit_no && !unit) throw { message: "Unit tidak ditemukan", status: 404 };
+    // unit_no not found is OK for standalone projects — submission will be created without a unit link
     if (payload.template_id) {
       const exists = await QcTemplate.findByPk(payload.template_id);
       if (!exists) throw { message: "Template QC tidak ditemukan", status: 404 };
@@ -278,6 +280,17 @@ const svc = {
           photo_url: r.photo_url || r.photo || null,
         }));
         await QcSubmissionResult.bulkCreate(rows, { transaction: t });
+      }
+
+      // Recalculate unit QC readiness
+      if (unit) {
+        const normalized = (payload.results || []).map((r) => normalizeResult(r.result || r.status));
+        const total = normalized.length;
+        const checkedCount = normalized.filter((r) => r !== null).length;
+        const failCount = normalized.filter((r) => r === 'Not OK').length;
+        const qc_readiness = total > 0 ? Math.round((checkedCount / total) * 100) : 0;
+        const qc_status = failCount > 0 ? 'Fail' : (checkedCount === total && total > 0 ? 'Pass' : 'Ongoing');
+        await ProjectUnit.update({ qc_readiness, qc_status }, { where: { id: unit.id }, transaction: t });
       }
 
       return submission;
@@ -319,8 +332,23 @@ const svc = {
     const submission = await QcSubmission.findByPk(id);
     if (!submission) throw { message: "Submission QC tidak ditemukan", status: 404 };
     if (submission.status !== "Draft") throw { message: "Submission sudah disubmit", status: 400 };
-    await submission.update({ status: "Submitted", submitted_by: userId });
-    return submission;
+
+    return sequelize.transaction(async (t) => {
+      await submission.update({ status: "Submitted", submitted_by: userId }, { transaction: t });
+
+      // Recalculate unit QC readiness on final submit
+      if (submission.unit_id) {
+        const results = await QcSubmissionResult.findAll({ where: { submission_id: id }, transaction: t });
+        const total = results.length;
+        const checkedCount = results.filter((r) => r.result !== null).length;
+        const failCount = results.filter((r) => r.result === 'Not OK').length;
+        const qc_readiness = total > 0 ? Math.round((checkedCount / total) * 100) : 0;
+        const qc_status = failCount > 0 ? 'Fail' : (checkedCount === total && total > 0 ? 'Pass' : 'Ongoing');
+        await ProjectUnit.update({ qc_readiness, qc_status }, { where: { id: submission.unit_id }, transaction: t });
+      }
+
+      return submission;
+    });
   },
 
   removeSubmission: async (id) => {
