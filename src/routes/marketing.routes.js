@@ -6,25 +6,25 @@ const { authenticate, authorize } = require('../middlewares/auth.middleware');
 
 const SA = authorize('Super Admin');
 
-router.use(authenticate, SA);
+router.use(authenticate);
 
 // Leads (fixed paths first)
-router.get   ('/leads/stats', ctrl.getLeadStats);
-router.get   ('/leads',       ctrl.listLeads);
-router.post  ('/leads',       ctrl.createLead);
-router.get   ('/leads/:id',   ctrl.getLead);
-router.put   ('/leads/:id',   ctrl.updateLead);
-router.delete('/leads/:id',   ctrl.removeLead);
+router.get   ('/leads/stats', SA, ctrl.getLeadStats);
+router.get   ('/leads',       SA, ctrl.listLeads);
+router.post  ('/leads',       SA, ctrl.createLead);
+router.get   ('/leads/:id',   SA, ctrl.getLead);
+router.put   ('/leads/:id',   SA, ctrl.updateLead);
+router.delete('/leads/:id',   SA, ctrl.removeLead);
 
 // Marketing Persons
-router.get   ('/marketing-persons',      ctrl.listPersons);
-router.post  ('/marketing-persons',      ctrl.createPerson);
-router.get   ('/marketing-persons/:id',  ctrl.getPerson);
-router.put   ('/marketing-persons/:id',  ctrl.updatePerson);
-router.delete('/marketing-persons/:id',  ctrl.removePerson);
+router.get   ('/marketing-persons',      SA, ctrl.listPersons);
+router.post  ('/marketing-persons',      SA, ctrl.createPerson);
+router.get   ('/marketing-persons/:id',  SA, ctrl.getPerson);
+router.put   ('/marketing-persons/:id',  SA, ctrl.updatePerson);
+router.delete('/marketing-persons/:id',  SA, ctrl.removePerson);
 
 // Unit Statuses
-router.get('/unit-statuses',            ctrl.listUnitStatuses);
-router.put('/unit-statuses/:unitNo',    ctrl.updateUnitStatus);
+router.get('/unit-statuses',            SA, ctrl.listUnitStatuses);
+router.put('/unit-statuses/:unitNo',    SA, ctrl.updateUnitStatus);
 
 module.exports = router;

@@ -77,11 +77,24 @@ module.exports = {
 
   // ── Attendances ────────────────────────────────────────────────
 
-  listAttendances: async ({ user_id, date, status, page, limit } = {}) => {
+  listAttendances: async ({ user_id, date, month, year, status, page, limit } = {}) => {
     const where = {};
     if (user_id) where.user_id = user_id;
-    if (date)    where.attendance_date = date;
-    if (status)  where.status = status;
+    if (date) {
+      where.attendance_date = date;
+    } else if (month && year) {
+      const y = parseInt(year, 10);
+      const m = parseInt(month, 10);
+      const startDate = `${y}-${String(m).padStart(2, '0')}-01`;
+      const lastDay   = new Date(y, m, 0).getDate(); // last day of month
+      const endDate   = `${y}-${String(m).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+      where.attendance_date = { [Op.between]: [startDate, endDate] };
+    }
+    if (status) where.status = status;
+
+    // Allow up to 500 records for monthly recap
+    const capLimit = parseInt(limit, 10) > 0 ? Math.min(parseInt(limit, 10), 500) : 20;
+    const offset   = ((parseInt(page, 10) || 1) - 1) * capLimit;
 
     const { count, rows } = await Attendance.findAndCountAll({
       where,
@@ -90,9 +103,10 @@ module.exports = {
         { model: WorkLocation, as: 'location', attributes: ['id', 'name'] },
       ],
       order: [['attendance_date', 'DESC'], ['clock_in', 'DESC']],
-      ...paginate(page, limit),
+      limit: capLimit,
+      offset,
     });
-    return { data: rows, pagination: mkPagination(count, page, limit) };
+    return { data: rows, pagination: mkPagination(count, page, capLimit) };
   },
 
   getMyAttendances: async (userId) => Attendance.findAll({
@@ -109,13 +123,32 @@ module.exports = {
     const existing = await Attendance.findOne({ where: { user_id: userId, attendance_date: today } });
     if (existing) throw { message: 'Anda sudah clock-in hari ini', status: 400 };
 
-    // Tentukan lokasi terdekat
-    const locs = await WorkLocation.findAll({ where: { is_active: true } });
-    let nearestId = null;
-    let minDist = Infinity;
-    for (const loc of locs) {
-      const d = haversineKm(lat, lng, parseFloat(loc.latitude), parseFloat(loc.longitude));
-      if (d < minDist) { minDist = d; nearestId = loc.id; }
+    // Cek apakah user punya assignment lokasi
+    const assignment = await UserLocationAssignment.findOne({
+      where: { user_id: userId },
+      include: [{ model: WorkLocation, as: 'location', where: { is_active: true } }],
+    });
+
+    let workLocationId = null;
+
+    if (assignment?.location) {
+      // User punya lokasi yang ditugaskan — validasi radius
+      const loc = assignment.location;
+      const distM = Math.round(haversineKm(lat, lng, parseFloat(loc.latitude), parseFloat(loc.longitude)) * 1000);
+      const radius = loc.radius_m ?? 100;
+      if (distM > radius) {
+        throw {
+          message: `Di luar area absensi. Jarak Anda: ${distM}m, radius yang diizinkan: ${radius}m`,
+          status: 400,
+        };
+      }
+      workLocationId = loc.id;
+    } else {
+      // Tidak ada assignment — tolak clock-in
+      throw {
+        message: 'Anda belum ditugaskan ke lokasi absensi. Hubungi admin untuk mendapatkan penugasan lokasi.',
+        status: 400,
+      };
     }
 
     const now = new Date();
@@ -124,7 +157,7 @@ module.exports = {
 
     return Attendance.create({
       user_id: userId,
-      work_location_id: nearestId,
+      work_location_id: workLocationId,
       attendance_date: today,
       clock_in: time,
       clock_in_lat: lat,
