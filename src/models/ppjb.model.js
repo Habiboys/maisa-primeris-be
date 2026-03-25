@@ -11,6 +11,7 @@ module.exports = (sequelize, DataTypes) => {
     id            : { type: DataTypes.UUID, defaultValue: DataTypes.UUIDV4, primaryKey: true },
     housing_unit_id: DataTypes.UUID,
     consumer_id   : DataTypes.UUID,
+    company_id    : DataTypes.UUID,
     nomor_ppjb    : DataTypes.STRING(100),
     tanggal_ppjb  : DataTypes.DATEONLY,
     harga_ppjb    : DataTypes.BIGINT,

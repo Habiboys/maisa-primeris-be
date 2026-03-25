@@ -45,4 +45,37 @@ module.exports = {
       return error(res, err.message, err.status || 400);
     }
   },
+
+  // POST /api/v1/auth/forgot-password
+  forgotPassword: async (req, res) => {
+    try {
+      const { email } = req.body;
+      await authService.requestPasswordReset(email);
+      return success(res, null, 'Jika email terdaftar, Anda akan menerima link reset password.');
+    } catch (err) {
+      return error(res, err.message, err.status || 500);
+    }
+  },
+
+  // GET /api/v1/auth/verify-reset-token?token=xxx
+  verifyResetToken: async (req, res) => {
+    try {
+      const { token } = req.query;
+      const result = await authService.verifyResetToken(token);
+      return success(res, result, 'Token valid');
+    } catch (err) {
+      return error(res, err.message, err.status || 400);
+    }
+  },
+
+  // POST /api/v1/auth/reset-password
+  resetPassword: async (req, res) => {
+    try {
+      const { token, new_password } = req.body;
+      await authService.resetPassword(token, new_password);
+      return success(res, null, 'Password berhasil direset. Silakan login dengan password baru.');
+    } catch (err) {
+      return error(res, err.message, err.status || 400);
+    }
+  },
 };

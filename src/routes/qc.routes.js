@@ -3,9 +3,10 @@
 const router = require("express").Router();
 const ctrl = require("../controllers/qc.controller");
 const { authenticate, authorize } = require("../middlewares/auth.middleware");
+const { ensureTenantContext } = require("../middlewares/tenant.middleware");
 
-const requireSA = [authenticate, authorize("Super Admin")];
-const requireSAPM = [authenticate, authorize("Super Admin", "Project Management")];
+const requireSA = [authenticate, ensureTenantContext, authorize("Super Admin")];
+const requireSAPM = [authenticate, ensureTenantContext, authorize("Super Admin", "Project Management")];
 
 // Templates
 router.get("/qc-templates", requireSAPM, ctrl.listTemplates);

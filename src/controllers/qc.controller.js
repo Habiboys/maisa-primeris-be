@@ -63,9 +63,9 @@ const submissionUpdateSchema = submissionSchema.fork(
 
 module.exports = {
   // ── Templates ───────────────────────────────────────────
-  listTemplates: async (_req, res) => {
+  listTemplates: async (req, res) => {
     try {
-      const r = await svc.listTemplates();
+      const r = await svc.listTemplates(req.user);
       return success(res, r, "Daftar template QC");
     } catch (e) {
       return error(res, e.message, e.status || 500);
@@ -74,7 +74,7 @@ module.exports = {
 
   getTemplate: async (req, res) => {
     try {
-      const r = await svc.getTemplate(req.params.id);
+      const r = await svc.getTemplate(req.params.id, req.user);
       return success(res, r, "Detail template QC");
     } catch (e) {
       return error(res, e.message, e.status || 500);
@@ -85,7 +85,7 @@ module.exports = {
     const { error: vErr } = templateSchema.validate(req.body, { abortEarly: false, stripUnknown: true });
     if (vErr) return error(res, "Validasi gagal", 400, vErr.details.map((d) => d.message));
     try {
-      const r = await svc.createTemplate(req.body);
+      const r = await svc.createTemplate(req.body, req.user);
       return created(res, r, "Template QC berhasil dibuat");
     } catch (e) {
       return error(res, e.message, e.status || 500);
@@ -96,7 +96,7 @@ module.exports = {
     const { error: vErr } = templateSchema.fork(["name"], (s) => s.optional()).validate(req.body, { abortEarly: false, stripUnknown: true });
     if (vErr) return error(res, "Validasi gagal", 400, vErr.details.map((d) => d.message));
     try {
-      const r = await svc.updateTemplate(req.params.id, req.body);
+      const r = await svc.updateTemplate(req.params.id, req.body, req.user);
       return success(res, r, "Template QC diperbarui");
     } catch (e) {
       return error(res, e.message, e.status || 500);
@@ -105,7 +105,7 @@ module.exports = {
 
   removeTemplate: async (req, res) => {
     try {
-      await svc.removeTemplate(req.params.id);
+      await svc.removeTemplate(req.params.id, req.user);
       return success(res, null, "Template QC dihapus");
     } catch (e) {
       return error(res, e.message, e.status || 500);
@@ -114,7 +114,7 @@ module.exports = {
 
   duplicateTemplate: async (req, res) => {
     try {
-      const r = await svc.duplicateTemplate(req.params.id);
+      const r = await svc.duplicateTemplate(req.params.id, req.user);
       return created(res, r, "Template QC diduplikasi");
     } catch (e) {
       return error(res, e.message, e.status || 500);
@@ -126,7 +126,7 @@ module.exports = {
     const { error: vErr } = sectionSchema.validate(req.body, { abortEarly: false, stripUnknown: true });
     if (vErr) return error(res, "Validasi gagal", 400, vErr.details.map((d) => d.message));
     try {
-      const r = await svc.createSection(req.params.id, req.body);
+      const r = await svc.createSection(req.params.id, req.body, req.user);
       return created(res, r, "Section ditambahkan");
     } catch (e) {
       return error(res, e.message, e.status || 500);
@@ -137,7 +137,7 @@ module.exports = {
     const { error: vErr } = sectionSchema.fork(["name"], (s) => s.optional()).validate(req.body, { abortEarly: false, stripUnknown: true });
     if (vErr) return error(res, "Validasi gagal", 400, vErr.details.map((d) => d.message));
     try {
-      const r = await svc.updateSection(req.params.id, req.params.sectionId, req.body);
+      const r = await svc.updateSection(req.params.id, req.params.sectionId, req.body, req.user);
       return success(res, r, "Section diperbarui");
     } catch (e) {
       return error(res, e.message, e.status || 500);
@@ -146,7 +146,7 @@ module.exports = {
 
   removeSection: async (req, res) => {
     try {
-      await svc.removeSection(req.params.id, req.params.sectionId);
+      await svc.removeSection(req.params.id, req.params.sectionId, req.user);
       return success(res, null, "Section dihapus");
     } catch (e) {
       return error(res, e.message, e.status || 500);
@@ -158,7 +158,7 @@ module.exports = {
     const { error: vErr } = itemSchema.validate(req.body, { abortEarly: false, stripUnknown: true });
     if (vErr) return error(res, "Validasi gagal", 400, vErr.details.map((d) => d.message));
     try {
-      const r = await svc.createItem(req.params.id, req.params.sectionId, req.body);
+      const r = await svc.createItem(req.params.id, req.params.sectionId, req.body, req.user);
       return created(res, r, "Item QC ditambahkan");
     } catch (e) {
       return error(res, e.message, e.status || 500);
@@ -169,7 +169,7 @@ module.exports = {
     const { error: vErr } = itemSchema.fork(["description"], (s) => s.optional()).validate(req.body, { abortEarly: false, stripUnknown: true });
     if (vErr) return error(res, "Validasi gagal", 400, vErr.details.map((d) => d.message));
     try {
-      const r = await svc.updateItem(req.params.id, req.params.sectionId, req.params.itemId, req.body);
+      const r = await svc.updateItem(req.params.id, req.params.sectionId, req.params.itemId, req.body, req.user);
       return success(res, r, "Item QC diperbarui");
     } catch (e) {
       return error(res, e.message, e.status || 500);
@@ -178,7 +178,7 @@ module.exports = {
 
   removeItem: async (req, res) => {
     try {
-      await svc.removeItem(req.params.id, req.params.sectionId, req.params.itemId);
+      await svc.removeItem(req.params.id, req.params.sectionId, req.params.itemId, req.user);
       return success(res, null, "Item QC dihapus");
     } catch (e) {
       return error(res, e.message, e.status || 500);
@@ -188,7 +188,7 @@ module.exports = {
   // ── Submissions ─────────────────────────────────────────
   listSubmissions: async (req, res) => {
     try {
-      const r = await svc.listSubmissions(req.query);
+      const r = await svc.listSubmissions(req.query, req.user);
       return success(res, r, "Daftar submission QC");
     } catch (e) {
       return error(res, e.message, e.status || 500);
@@ -197,7 +197,7 @@ module.exports = {
 
   getSubmission: async (req, res) => {
     try {
-      const r = await svc.getSubmission(req.params.id);
+      const r = await svc.getSubmission(req.params.id, req.user);
       return success(res, r, "Detail submission QC");
     } catch (e) {
       return error(res, e.message, e.status || 500);
@@ -208,7 +208,7 @@ module.exports = {
     const { error: vErr } = submissionSchema.validate(req.body, { abortEarly: false, stripUnknown: true });
     if (vErr) return error(res, "Validasi gagal", 400, vErr.details.map((d) => d.message));
     try {
-      const r = await svc.createSubmission(req.body, req.user.id);
+      const r = await svc.createSubmission(req.body, req.user.id, req.user);
       return created(res, r, "Submission QC dibuat");
     } catch (e) {
       return error(res, e.message, e.status || 500);
@@ -219,7 +219,7 @@ module.exports = {
     const { error: vErr } = submissionUpdateSchema.validate(req.body, { abortEarly: false, stripUnknown: true });
     if (vErr) return error(res, "Validasi gagal", 400, vErr.details.map((d) => d.message));
     try {
-      const r = await svc.updateSubmission(req.params.id, req.body);
+      const r = await svc.updateSubmission(req.params.id, req.body, req.user);
       return success(res, r, "Submission QC diperbarui");
     } catch (e) {
       return error(res, e.message, e.status || 500);
@@ -228,7 +228,7 @@ module.exports = {
 
   submitSubmission: async (req, res) => {
     try {
-      const r = await svc.submitSubmission(req.params.id, req.user.id);
+      const r = await svc.submitSubmission(req.params.id, req.user.id, req.user);
       return success(res, r, "Submission QC disubmit");
     } catch (e) {
       return error(res, e.message, e.status || 500);
@@ -237,7 +237,7 @@ module.exports = {
 
   removeSubmission: async (req, res) => {
     try {
-      await svc.removeSubmission(req.params.id);
+      await svc.removeSubmission(req.params.id, req.user);
       return success(res, null, "Submission QC dihapus");
     } catch (e) {
       return error(res, e.message, e.status || 500);
@@ -246,7 +246,7 @@ module.exports = {
 
   exportSubmission: async (req, res) => {
     try {
-      const r = await svc.exportSubmission(req.params.id);
+      const r = await svc.exportSubmission(req.params.id, req.user);
       return success(res, r, "Export submission QC");
     } catch (e) {
       return error(res, e.message, e.status || 500);

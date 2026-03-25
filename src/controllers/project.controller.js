@@ -10,14 +10,10 @@ const projectSchema = Joi.object({
   type: Joi.string().valid("cluster", "standalone").required(),
   location: Joi.string().max(255).allow(null, ""),
   units_count: Joi.number().integer().min(0),
-  progress: Joi.number().integer().min(0).max(100),
+  unit_prefix: Joi.string().max(50).allow(null, ""),
+  unit_tipe: Joi.string().max(50).allow(null, ""),
   status: Joi.string().valid("On Progress", "Completed", "Delayed"),
   deadline: Joi.string().max(50).allow(null, ""),
-  lead: Joi.string().max(100).allow(null, ""),
-  qc_template_id: Joi.string().uuid().allow(null, ""),
-  construction_status: Joi.string().max(100).allow(null, ""),
-  start_date: Joi.date().iso().allow(null, ""),
-  end_date: Joi.date().iso().allow(null, ""),
   description: Joi.string().allow(null, ""),
 });
 
@@ -80,14 +76,14 @@ module.exports = {
   // Projects
   listProjects: async (req, res) => {
     try {
-      const r = await svc.listProjects(req.query);
+      const r = await svc.listProjects(req.query, req.user);
       return res.json({ success: true, ...r, message: "Daftar proyek" });
     } catch (e) { return error(res, e.message, e.status || 500); }
   },
 
   getProject: async (req, res) => {
     try {
-      const r = await svc.getProjectById(req.params.id);
+      const r = await svc.getProjectById(req.params.id, req.user);
       return success(res, r, "Detail proyek");
     } catch (e) { return error(res, e.message, e.status || 500); }
   },
@@ -96,7 +92,7 @@ module.exports = {
     const { error: vErr } = projectSchema.validate(req.body, { abortEarly: false, stripUnknown: true });
     if (vErr) return error(res, "Validasi gagal", 400, vErr.details.map((d) => d.message));
     try {
-      const r = await svc.createProject(req.body);
+      const r = await svc.createProject(req.body, req.user);
       return created(res, r, "Proyek berhasil dibuat");
     } catch (e) { return error(res, e.message, e.status || 500); }
   },
@@ -105,14 +101,14 @@ module.exports = {
     const { error: vErr } = projectSchema.fork(["name", "type"], (s) => s.optional()).validate(req.body, { abortEarly: false, stripUnknown: true });
     if (vErr) return error(res, "Validasi gagal", 400, vErr.details.map((d) => d.message));
     try {
-      const r = await svc.updateProject(req.params.id, req.body);
+      const r = await svc.updateProject(req.params.id, req.body, req.user);
       return success(res, r, "Proyek berhasil diperbarui");
     } catch (e) { return error(res, e.message, e.status || 500); }
   },
 
   removeProject: async (req, res) => {
     try {
-      await svc.removeProject(req.params.id);
+      await svc.removeProject(req.params.id, req.user);
       return success(res, null, "Proyek berhasil dihapus");
     } catch (e) { return error(res, e.message, e.status || 500); }
   },
@@ -120,14 +116,14 @@ module.exports = {
   // Units
   listUnits: async (req, res) => {
     try {
-      const r = await svc.listUnits(req.params.projectId);
+      const r = await svc.listUnits(req.params.projectId, req.user);
       return success(res, r, "Daftar unit");
     } catch (e) { return error(res, e.message, e.status || 500); }
   },
 
   getUnit: async (req, res) => {
     try {
-      const r = await svc.getUnit(req.params.projectId, req.params.unitNo);
+      const r = await svc.getUnit(req.params.projectId, req.params.unitNo, req.user);
       return success(res, r, "Detail unit");
     } catch (e) { return error(res, e.message, e.status || 500); }
   },
@@ -136,7 +132,7 @@ module.exports = {
     const { error: vErr } = unitSchema.validate(req.body, { abortEarly: false, stripUnknown: true });
     if (vErr) return error(res, "Validasi gagal", 400, vErr.details.map((d) => d.message));
     try {
-      const r = await svc.createUnit(req.params.projectId, req.body);
+      const r = await svc.createUnit(req.params.projectId, req.body, req.user);
       return created(res, r, "Unit berhasil ditambahkan");
     } catch (e) { return error(res, e.message, e.status || 500); }
   },
@@ -145,47 +141,61 @@ module.exports = {
     const { error: vErr } = unitSchema.fork(["no"], (s) => s.optional()).validate(req.body, { abortEarly: false, stripUnknown: true });
     if (vErr) return error(res, "Validasi gagal", 400, vErr.details.map((d) => d.message));
     try {
-      const r = await svc.updateUnit(req.params.projectId, req.params.unitNo, req.body);
+      const r = await svc.updateUnit(req.params.projectId, req.params.unitNo, req.body, req.user);
       return success(res, r, "Unit berhasil diperbarui");
     } catch (e) { return error(res, e.message, e.status || 500); }
   },
 
   removeUnit: async (req, res) => {
     try {
-      await svc.removeUnit(req.params.projectId, req.params.unitNo);
+      await svc.removeUnit(req.params.projectId, req.params.unitNo, req.user);
       return success(res, null, "Unit berhasil dihapus");
     } catch (e) { return error(res, e.message, e.status || 500); }
   },
 
+  bulkCreateUnits: async (req, res) => {
+    const schema = Joi.object({
+      count: Joi.number().integer().min(1).max(200).required(),
+      prefix: Joi.string().max(50).required(),
+      tipe: Joi.string().max(50).allow(null, ""),
+    });
+    const { error: vErr } = schema.validate(req.body, { abortEarly: false, stripUnknown: true });
+    if (vErr) return error(res, "Validasi gagal", 400, vErr.details.map((d) => d.message));
+    try {
+      const r = await svc.bulkCreateUnitsForProject(req.params.projectId, req.body, req.user);
+      return created(res, r, `${r.length} unit berhasil dibuat`);
+    } catch (e) { return error(res, e.message, e.status || 500); }
+  },
+
   // Construction statuses
-  listConstructionStatuses: async (_req, res) => {
-    try { const r = await svc.listConstructionStatuses(); return success(res, r, "Daftar status konstruksi"); }
+  listConstructionStatuses: async (req, res) => {
+    try { const r = await svc.listConstructionStatuses(req.user); return success(res, r, "Daftar status konstruksi"); }
     catch (e) { return error(res, e.message, e.status || 500); }
   },
 
   createConstructionStatus: async (req, res) => {
     const { error: vErr } = constructionStatusSchema.validate(req.body, { abortEarly: false, stripUnknown: true });
     if (vErr) return error(res, "Validasi gagal", 400, vErr.details.map((d) => d.message));
-    try { const r = await svc.createConstructionStatus(req.body); return created(res, r, "Status konstruksi ditambahkan"); }
+    try { const r = await svc.createConstructionStatus(req.body, req.user); return created(res, r, "Status konstruksi ditambahkan"); }
     catch (e) { return error(res, e.message, e.status || 500); }
   },
 
   updateConstructionStatus: async (req, res) => {
     const { error: vErr } = constructionStatusSchema.validate(req.body, { abortEarly: false, stripUnknown: true });
     if (vErr) return error(res, "Validasi gagal", 400, vErr.details.map((d) => d.message));
-    try { const r = await svc.updateConstructionStatus(req.params.id, req.body); return success(res, r, "Status konstruksi diperbarui"); }
+    try { const r = await svc.updateConstructionStatus(req.params.id, req.body, req.user); return success(res, r, "Status konstruksi diperbarui"); }
     catch (e) { return error(res, e.message, e.status || 500); }
   },
 
   removeConstructionStatus: async (req, res) => {
-    try { await svc.removeConstructionStatus(req.params.id); return success(res, null, "Status konstruksi dihapus"); }
+    try { await svc.removeConstructionStatus(req.params.id, req.user); return success(res, null, "Status konstruksi dihapus"); }
     catch (e) { return error(res, e.message, e.status || 500); }
   },
 
   // Time schedule
   listTimeSchedule: async (req, res) => {
     try {
-      const r = await svc.listTimeSchedule(req.params.projectId, req.params.unitNo);
+      const r = await svc.listTimeSchedule(req.params.projectId, req.params.unitNo, req.user);
       return success(res, r, "Daftar time schedule");
     } catch (e) { return error(res, e.message, e.status || 500); }
   },
@@ -194,7 +204,7 @@ module.exports = {
     const { error: vErr } = timeScheduleSchema.validate(req.body, { abortEarly: false, stripUnknown: true });
     if (vErr) return error(res, "Validasi gagal", 400, vErr.details.map((d) => d.message));
     try {
-      const r = await svc.createTimeScheduleItem(req.params.projectId, req.params.unitNo, req.body);
+      const r = await svc.createTimeScheduleItem(req.params.projectId, req.params.unitNo, req.body, req.user);
       return created(res, r, "Item time schedule ditambahkan");
     } catch (e) { return error(res, e.message, e.status || 500); }
   },
@@ -203,14 +213,14 @@ module.exports = {
     const { error: vErr } = timeScheduleSchema.validate(req.body, { abortEarly: false, stripUnknown: true });
     if (vErr) return error(res, "Validasi gagal", 400, vErr.details.map((d) => d.message));
     try {
-      const r = await svc.updateTimeScheduleItem(req.params.projectId, req.params.unitNo, req.params.itemId, req.body);
+      const r = await svc.updateTimeScheduleItem(req.params.projectId, req.params.unitNo, req.params.itemId, req.body, req.user);
       return success(res, r, "Item time schedule diperbarui");
     } catch (e) { return error(res, e.message, e.status || 500); }
   },
 
   // Inventory
   listInventoryLogs: async (req, res) => {
-    try { const r = await svc.listInventoryLogs(req.params.projectId); return success(res, r, "Daftar inventory log"); }
+    try { const r = await svc.listInventoryLogs(req.params.projectId, req.user); return success(res, r, "Daftar inventory log"); }
     catch (e) { return error(res, e.message, e.status || 500); }
   },
 
@@ -218,14 +228,14 @@ module.exports = {
     const { error: vErr } = inventorySchema.validate(req.body, { abortEarly: false, stripUnknown: true });
     if (vErr) return error(res, "Validasi gagal", 400, vErr.details.map((d) => d.message));
     try {
-      const r = await svc.createInventoryLog(req.params.projectId, req.body, req.user.id);
+      const r = await svc.createInventoryLog(req.params.projectId, req.body, req.user.id, req.user);
       return created(res, r, "Inventory log ditambahkan");
     } catch (e) { return error(res, e.message, e.status || 500); }
   },
 
   // Work logs
   listWorkLogs: async (req, res) => {
-    try { const r = await svc.listWorkLogs(req.params.projectId, req.query); return success(res, r, "Daftar work log"); }
+    try { const r = await svc.listWorkLogs(req.params.projectId, req.query, req.user); return success(res, r, "Daftar work log"); }
     catch (e) { return error(res, e.message, e.status || 500); }
   },
 
@@ -233,7 +243,7 @@ module.exports = {
     const { error: vErr } = workLogSchema.validate(req.body, { abortEarly: false, stripUnknown: true });
     if (vErr) return error(res, "Validasi gagal", 400, vErr.details.map((d) => d.message));
     try {
-      const r = await svc.createWorkLog(req.params.projectId, req.body, req.files, req.user.id);
+      const r = await svc.createWorkLog(req.params.projectId, req.body, req.files, req.user.id, req.user);
       return created(res, r, "Work log ditambahkan");
     } catch (e) { return error(res, e.message, e.status || 500); }
   },
@@ -242,7 +252,7 @@ module.exports = {
     const { error: vErr } = workLogSchema.fork(["date", "activity"], (s) => s.optional()).validate(req.body, { abortEarly: false, stripUnknown: true });
     if (vErr) return error(res, "Validasi gagal", 400, vErr.details.map((d) => d.message));
     try {
-      const r = await svc.updateWorkLog(req.params.projectId, req.params.logId, req.body);
+      const r = await svc.updateWorkLog(req.params.projectId, req.params.logId, req.body, req.user);
       return success(res, r, "Work log diperbarui");
     } catch (e) { return error(res, e.message, e.status || 500); }
   },

@@ -16,6 +16,7 @@ module.exports = (sequelize, DataTypes) => {
     address       : DataTypes.TEXT,
     unit_code     : DataTypes.STRING(50),
     project_id    : DataTypes.UUID,
+    company_id    : DataTypes.UUID,
     total_price   : DataTypes.BIGINT,
     paid_amount   : { type: DataTypes.BIGINT, defaultValue: 0 },
     payment_scheme: DataTypes.STRING(80),

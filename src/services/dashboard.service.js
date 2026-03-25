@@ -3,18 +3,20 @@
 const { Op, fn, col, literal, QueryTypes } = require('sequelize');
 const sequelize = require('../models').sequelize;
 const {
-  Transaction, HousingUnit, Consumer, Lead, Attendance,
+  Transaction, HousingUnit, Consumer, Lead, Attendance, MarketingPerson,
 } = require('../models');
+const { withTenantWhere } = require('../utils/tenant');
 
 module.exports = {
   // ── KPI Summary ───────────────────────────────────────────────
-  getSummary: async () => {
+  getSummary: async (actor) => {
+    const tenantWhere = withTenantWhere({}, actor);
     const [totalUnit, unitTerjual, unitProgres] = await Promise.all([
-      HousingUnit.count(),
-      HousingUnit.count({ where: { status: 'Sold' } }),
-      HousingUnit.count({ where: { status: 'Proses' } }),
+      HousingUnit.count({ where: tenantWhere }),
+      HousingUnit.count({ where: { ...tenantWhere, status: 'Sold' } }),
+      HousingUnit.count({ where: { ...tenantWhere, status: 'Proses' } }),
     ]);
-    const pendapatan = await Transaction.sum('amount', { where: { type: 'Pemasukan' } }) || 0;
+    const pendapatan = await Transaction.sum('amount', { where: { ...tenantWhere, type: 'Pemasukan' } }) || 0;
     const unit_kritis = Math.max(0, totalUnit - unitTerjual - unitProgres);
 
     return {
@@ -28,7 +30,8 @@ module.exports = {
   },
 
   // ── Cashflow (6 atau N bulan terakhir) ────────────────────────
-  getCashflow: async (months = 6) => {
+  getCashflow: async (months = 6, actor) => {
+    const tenantWhere = withTenantWhere({}, actor);
     const n = Math.min(parseInt(months, 10) || 6, 24);
     const results = [];
     const now = new Date();
@@ -40,8 +43,8 @@ module.exports = {
       const to   = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${lastDay}`;
 
       const [masuk, keluar] = await Promise.all([
-        Transaction.sum('amount', { where: { type: 'Pemasukan',    transaction_date: { [Op.between]: [from, to] } } }),
-        Transaction.sum('amount', { where: { type: 'Pengeluaran',  transaction_date: { [Op.between]: [from, to] } } }),
+        Transaction.sum('amount', { where: { ...tenantWhere, type: 'Pemasukan',    transaction_date: { [Op.between]: [from, to] } } }),
+        Transaction.sum('amount', { where: { ...tenantWhere, type: 'Pengeluaran',  transaction_date: { [Op.between]: [from, to] } } }),
       ]);
 
       results.push({
@@ -54,8 +57,9 @@ module.exports = {
   },
 
   // ── Sales Distribution ────────────────────────────────────────
-  getSalesDistribution: async () => {
+  getSalesDistribution: async (actor) => {
     const rows = await HousingUnit.findAll({
+      where: withTenantWhere({}, actor),
       attributes: ['status', [fn('COUNT', col('id')), 'count']],
       group: ['status'],
       raw: true,
@@ -64,13 +68,14 @@ module.exports = {
   },
 
   // ── Construction Progress (dummy per-phase) ───────────────────
-  getConstructionProgress: async () => {
-    const total = await HousingUnit.count();
+  getConstructionProgress: async (actor) => {
+    const tenantWhere = withTenantWhere({}, actor);
+    const total = await HousingUnit.count({ where: tenantWhere });
     if (total === 0) return [];
     // Buat estimasi progress per fase dari data yang ada
-    const sold    = await HousingUnit.count({ where: { status: 'Sold' } });
-    const proses  = await HousingUnit.count({ where: { status: 'Proses' } });
-    const avail   = await HousingUnit.count({ where: { status: 'Tersedia' } });
+    const sold    = await HousingUnit.count({ where: { ...tenantWhere, status: 'Sold' } });
+    const proses  = await HousingUnit.count({ where: { ...tenantWhere, status: 'Proses' } });
+    const avail   = await HousingUnit.count({ where: { ...tenantWhere, status: 'Tersedia' } });
 
     return [
       { phase: 'Pondasi',         target: total,                  actual: Math.round(sold * 1.2 + proses) },
@@ -81,9 +86,9 @@ module.exports = {
   },
 
   // ── Budget vs Actual ──────────────────────────────────────────
-  getBudgetVsActual: async () => {
+  getBudgetVsActual: async (actor) => {
     const months = 6;
-    const rows = await module.exports.getCashflow(months);
+    const rows = await module.exports.getCashflow(months, actor);
     return rows.map(r => ({
       month : r.month,
       budget: Math.round(r.keluar * 1.1),  // asumsi budget 10% di atas realisasi

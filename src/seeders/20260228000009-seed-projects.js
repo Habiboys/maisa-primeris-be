@@ -1,29 +1,30 @@
 'use strict';
 
 const { v4: uuidv4 } = require('uuid');
+const { getDefaultCompanyId } = require('../utils/seed-helper');
 
 module.exports = {
   async up(queryInterface) {
+    const companyId = await getDefaultCompanyId(queryInterface);
     const now = new Date();
 
-    /* ──────────────────────────────────────────────
-     * 1. Query FK references dari tabel lain
-     * ────────────────────────────────────────────── */
-
-    // QC Templates
+    // QC Templates (scoped by company)
     const [tpl36] = await queryInterface.sequelize.query(
-      `SELECT id FROM qc_templates WHERE name LIKE '%Tipe 36%' LIMIT 1`
+      `SELECT id FROM qc_templates WHERE company_id = ? AND name LIKE '%Tipe 36%' LIMIT 1`,
+      { replacements: [companyId] }
     );
     const [tpl45] = await queryInterface.sequelize.query(
-      `SELECT id FROM qc_templates WHERE name LIKE '%Tipe 45%' LIMIT 1`
+      `SELECT id FROM qc_templates WHERE company_id = ? AND name LIKE '%Tipe 45%' LIMIT 1`,
+      { replacements: [companyId] }
     );
     const QC_TPL_36 = tpl36.length ? tpl36[0].id : null;
     const QC_TPL_45 = tpl45.length ? tpl45[0].id : null;
 
-    // Construction Statuses
+    // Construction Statuses (scoped by company)
     const csMap = {};
     const [csRows] = await queryInterface.sequelize.query(
-      `SELECT id, name FROM construction_statuses`
+      `SELECT id, name FROM construction_statuses WHERE company_id = ?`,
+      { replacements: [companyId] }
     );
     csRows.forEach(r => { csMap[r.name] = r.id; });
 
@@ -38,15 +39,13 @@ module.exports = {
       SERAH     : csMap['Serah Terima']      || null,
     };
 
-    /* ──────────────────────────────────────────────
-     * 2. Projects
-     * ────────────────────────────────────────────── */
-    const P1 = uuidv4(); // Maisa Primeris Tahap 1
-    const P2 = uuidv4(); // Maisa Primeris Tahap 2
+    const P1 = uuidv4();
+    const P2 = uuidv4();
 
     await queryInterface.bulkInsert('projects', [
       {
         id: P1,
+        company_id: companyId,
         name: 'Maisa Primeris Tahap 1',
         type: 'cluster',
         location: 'Jl. Buah Batu No. 120, Bandung Selatan',
@@ -54,17 +53,14 @@ module.exports = {
         progress: 68,
         status: 'On Progress',
         deadline: '2027-03-31',
-        lead: 'Ir. Bambang Sutrisno',
-        qc_template_id: QC_TPL_36,
         construction_status: 'Finishing',
-        start_date: '2026-01-15',
-        end_date: '2027-03-31',
         description: 'Proyek perumahan cluster Maisa Primeris Tahap 1 terdiri dari 10 unit rumah tipe 36, 45, dan 54 di kawasan Bandung Selatan. Fasilitas meliputi taman bermain, pos keamanan 24 jam, dan akses jalan 6 meter.',
         created_at: now,
         updated_at: now,
       },
       {
         id: P2,
+        company_id: companyId,
         name: 'Maisa Primeris Tahap 2',
         type: 'cluster',
         location: 'Jl. Soekarno-Hatta KM 12, Bandung Timur',
@@ -72,11 +68,7 @@ module.exports = {
         progress: 18,
         status: 'On Progress',
         deadline: '2027-12-31',
-        lead: 'Ahmad Fauzi, S.T.',
-        qc_template_id: QC_TPL_45,
         construction_status: 'Pondasi',
-        start_date: '2026-06-01',
-        end_date: '2027-12-31',
         description: 'Proyek perumahan cluster Maisa Primeris Tahap 2 dengan 6 unit di kawasan Bandung Timur. Konsep green living dengan area terbuka hijau 30% dari total lahan.',
         created_at: now,
         updated_at: now,

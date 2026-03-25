@@ -3,11 +3,12 @@
 const router = require('express').Router();
 const ctrl   = require('../controllers/legal.controller');
 const { authenticate, authorize } = require('../middlewares/auth.middleware');
+const { ensureTenantContext } = require('../middlewares/tenant.middleware');
 
 const SA    = authorize('Super Admin');
 const SA_FN = authorize('Super Admin', 'Finance');
 
-router.use(authenticate);
+router.use(authenticate, ensureTenantContext);
 
 const legalRoutes = (path, handler) => {
   router.get   (`/${path}`,      SA_FN, handler.list);

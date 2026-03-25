@@ -2,6 +2,7 @@
 
 const { Op }   = require('sequelize');
 const { Ppjb, Akad, Bast, PindahUnit, Pembatalan, Consumer, HousingUnit } = require('../models');
+const { withTenantWhere, requireCompanyId, stripCompanyId } = require('../utils/tenant');
 
 const paginate = (page = 1, limit = 20) => {
   const lim = Math.min(parseInt(limit, 10) || 20, 100);
@@ -18,33 +19,76 @@ const searchWhere = (search, fields) => search
 // ── Generic CRUD helpers ──────────────────────────────────────────
 
 const consumerInclude = { model: Consumer, as: 'consumer', attributes: ['id', 'name', 'nik', 'phone', 'email'] };
-const housingInclude  = { model: HousingUnit, as: 'housingUnit', attributes: ['id', 'unit_code', 'unit_type', 'luas_tanah', 'luas_bangunan'] };
+const housingInclude  = { model: HousingUnit, as: 'housingUnit', attributes: ['id', 'unit_code', 'unit_type', 'luas_tanah', 'luas_bangunan', 'project_id'] };
+const housingUnitLamaInclude = { model: HousingUnit, as: 'housingUnitLama', attributes: ['id', 'unit_code', 'unit_type', 'project_id'] };
+const housingUnitBaruInclude = { model: HousingUnit, as: 'housingUnitBaru', attributes: ['id', 'unit_code', 'unit_type', 'project_id'] };
+
+const withTenantIncludes = (includes, actor) => includes.map((inc) => {
+  if (inc.as === 'consumer') {
+    return { ...inc, where: withTenantWhere({}, actor), required: false };
+  }
+  if (inc.as === 'housingUnit' || inc.as === 'housingUnitLama' || inc.as === 'housingUnitBaru') {
+    return { ...inc, where: withTenantWhere({}, actor), required: false };
+  }
+  return inc;
+});
+
+const HOUSING_UNIT_KEYS = ['housing_unit_id', 'housing_unit_id_lama', 'housing_unit_id_baru'];
+const validateHousingUnitIds = async (payload, actor) => {
+  for (const key of HOUSING_UNIT_KEYS) {
+    if (!payload[key]) continue;
+    const h = await HousingUnit.findOne({ where: withTenantWhere({ id: payload[key] }, actor) });
+    if (!h) throw { message: 'Unit lintas perusahaan tidak diizinkan', status: 400 };
+  }
+};
 
 const makeCRUD = (Model, notFoundMsg, searchFields = [], includes = []) => ({
-  list: async ({ search, page, limit, date_from, date_to } = {}) => {
+  list: async ({ search, page, limit, date_from, date_to } = {}, actor) => {
     const where = search ? searchWhere(search, searchFields) : {};
     if (date_from || date_to) {
       where.created_at = {};
       if (date_from) where.created_at[Op.gte] = new Date(date_from);
       if (date_to)   where.created_at[Op.lte] = new Date(`${date_to}T23:59:59`);
     }
-    const { count, rows } = await Model.findAndCountAll({ where, include: includes, order: [['created_at', 'DESC']], ...paginate(page, limit) });
+    const tenantWhere = withTenantWhere(where, actor);
+    const { count, rows } = await Model.findAndCountAll({
+      where: tenantWhere,
+      include: withTenantIncludes(includes, actor),
+      order: [['created_at', 'DESC']],
+      ...paginate(page, limit),
+    });
     return { data: rows, pagination: mkPagination(count, page, limit) };
   },
-  getById: async (id) => {
-    const r = await Model.findByPk(id, { include: includes });
+  getById: async (id, actor) => {
+    const r = await Model.findOne({ where: withTenantWhere({ id }, actor), include: withTenantIncludes(includes, actor) });
     if (!r) throw { message: notFoundMsg, status: 404 };
     return r;
   },
-  create:  async (payload) => Model.create(payload),
-  update:  async (id, payload) => {
-    const r = await Model.findByPk(id);
+  create:  async (payload, actor) => {
+    if (payload.consumer_id) {
+      const c = await Consumer.findOne({ where: withTenantWhere({ id: payload.consumer_id }, actor) });
+      if (!c) throw { message: 'Konsumen lintas perusahaan tidak diizinkan', status: 400 };
+    }
+    await validateHousingUnitIds(payload, actor);
+    const company_id = requireCompanyId(actor);
+    const safePayload = { ...stripCompanyId(payload), company_id };
+    return Model.create(safePayload);
+  },
+  update:  async (id, payload, actor) => {
+    const r = await Model.findOne({ where: withTenantWhere({ id }, actor), include: withTenantIncludes(includes, actor) });
     if (!r) throw { message: notFoundMsg, status: 404 };
-    await r.update(payload);
+
+    if (payload.consumer_id) {
+      const c = await Consumer.findOne({ where: withTenantWhere({ id: payload.consumer_id }, actor) });
+      if (!c) throw { message: 'Konsumen lintas perusahaan tidak diizinkan', status: 400 };
+    }
+    await validateHousingUnitIds(payload, actor);
+
+    await r.update(stripCompanyId(payload));
     return r;
   },
-  remove:  async (id) => {
-    const r = await Model.findByPk(id);
+  remove:  async (id, actor) => {
+    const r = await Model.findOne({ where: withTenantWhere({ id }, actor), include: withTenantIncludes(includes, actor) });
     if (!r) throw { message: notFoundMsg, status: 404 };
     await r.destroy();
   },
@@ -54,6 +98,6 @@ module.exports = {
   ppjb      : makeCRUD(Ppjb,       'PPJB tidak ditemukan',        ['nomor_ppjb'],        [consumerInclude, housingInclude]),
   akad      : makeCRUD(Akad,       'Akad tidak ditemukan',        ['nomor_akad'],         [consumerInclude, housingInclude]),
   bast      : makeCRUD(Bast,       'BAST tidak ditemukan',        ['nomor_bast'],         [consumerInclude, housingInclude]),
-  pindahUnit: makeCRUD(PindahUnit, 'Pindah unit tidak ditemukan', ['unit_lama', 'unit_baru'], [consumerInclude]),
-  pembatalan: makeCRUD(Pembatalan, 'Pembatalan tidak ditemukan',  ['unit_code'],          [consumerInclude]),
+  pindahUnit: makeCRUD(PindahUnit, 'Pindah unit tidak ditemukan', ['unit_lama', 'unit_baru'], [consumerInclude, housingUnitLamaInclude, housingUnitBaruInclude]),
+  pembatalan: makeCRUD(Pembatalan, 'Pembatalan tidak ditemukan',  ['unit_code'],          [consumerInclude, housingInclude]),
 };

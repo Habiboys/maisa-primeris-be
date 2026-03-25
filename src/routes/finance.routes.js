@@ -3,14 +3,16 @@
 const router = require('express').Router();
 const ctrl   = require('../controllers/finance.controller');
 const { authenticate, authorize } = require('../middlewares/auth.middleware');
+const { ensureTenantContext } = require('../middlewares/tenant.middleware');
 
 const SA_FN = authorize('Super Admin', 'Finance');
 const SA    = authorize('Super Admin');
 
-router.use(authenticate);
+router.use(authenticate, ensureTenantContext);
 
 // ── Transactions ─────────────────────────────────────────
 router.get   ('/transactions/summary',  SA_FN, ctrl.getSummary);
+router.get   ('/transactions/export',   SA_FN, ctrl.exportTransactions);
 router.get   ('/transactions',          SA_FN, ctrl.listTransactions);
 router.post  ('/transactions',          SA_FN, ctrl.createTransaction);
 router.get   ('/transactions/:id',      SA_FN, ctrl.getTransaction);
@@ -18,6 +20,7 @@ router.put   ('/transactions/:id',      SA_FN, ctrl.updateTransaction);
 router.delete('/transactions/:id',      SA,    ctrl.removeTransaction);
 
 // ── Consumers ─────────────────────────────────────────────
+router.get   ('/consumers/export',      SA_FN, ctrl.exportConsumers);
 router.get   ('/consumers',             SA_FN, ctrl.listConsumers);
 router.post  ('/consumers',             SA_FN, ctrl.createConsumer);
 router.get   ('/consumers/:id',         SA_FN, ctrl.getConsumer);

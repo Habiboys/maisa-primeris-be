@@ -17,6 +17,7 @@ module.exports = (sequelize, DataTypes) => {
       User.hasMany(models.SuratJalan,               { foreignKey: 'issued_by', as: 'suratJalan' });
       User.hasMany(models.MarketingPerson,          { foreignKey: 'user_id', as: 'marketingProfile' });
       User.belongsTo(models.WorkLocation,           { foreignKey: 'work_location_id', as: 'workLocation' });
+      User.belongsTo(models.Company,                { foreignKey: 'company_id', as: 'company' });
     }
   }
   User.init({
@@ -24,12 +25,15 @@ module.exports = (sequelize, DataTypes) => {
     name          : { type: DataTypes.STRING(100), allowNull: false },
     email         : { type: DataTypes.STRING(150), allowNull: false, unique: true },
     password      : { type: DataTypes.STRING(255), allowNull: false },
-    role          : { type: DataTypes.ENUM('Super Admin','Finance','Project Management'), defaultValue: 'Finance' },
+    role          : { type: DataTypes.ENUM('Platform Owner','Super Admin','Finance','Project Management'), defaultValue: 'Finance' },
     status        : { type: DataTypes.ENUM('Aktif','Nonaktif'), defaultValue: 'Aktif' },
     phone         : DataTypes.STRING(20),
     avatar        : DataTypes.STRING(255),
+    company_id    : DataTypes.UUID,
     work_location_id: DataTypes.UUID,
     last_login    : DataTypes.DATE,
+    password_reset_token   : DataTypes.STRING(255),
+    password_reset_expires  : DataTypes.DATE,
   }, {
     sequelize,
     modelName: 'User',

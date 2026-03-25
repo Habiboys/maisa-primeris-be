@@ -4,13 +4,18 @@ module.exports = (sequelize, DataTypes) => {
   class PindahUnit extends Model {
     static associate(models) {
       PindahUnit.belongsTo(models.Consumer, { foreignKey: 'consumer_id', as: 'consumer' });
+      PindahUnit.belongsTo(models.HousingUnit, { foreignKey: 'housing_unit_id_lama', as: 'housingUnitLama' });
+      PindahUnit.belongsTo(models.HousingUnit, { foreignKey: 'housing_unit_id_baru', as: 'housingUnitBaru' });
     }
   }
   PindahUnit.init({
-    id            : { type: DataTypes.UUID, defaultValue: DataTypes.UUIDV4, primaryKey: true },
-    consumer_id   : DataTypes.UUID,
-    unit_lama     : DataTypes.STRING(50),
-    unit_baru     : DataTypes.STRING(50),
+    id                   : { type: DataTypes.UUID, defaultValue: DataTypes.UUIDV4, primaryKey: true },
+    consumer_id          : DataTypes.UUID,
+    housing_unit_id_lama : DataTypes.UUID,
+    housing_unit_id_baru : DataTypes.UUID,
+    company_id          : DataTypes.UUID,
+    unit_lama            : DataTypes.STRING(50),
+    unit_baru            : DataTypes.STRING(50),
     tanggal_pindah: DataTypes.DATEONLY,
     alasan        : DataTypes.TEXT,
     selisih_harga : { type: DataTypes.BIGINT, defaultValue: 0 },

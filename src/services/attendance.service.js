@@ -2,8 +2,9 @@
 
 const { Op, fn, col, literal } = require('sequelize');
 const {
-  WorkLocation, UserLocationAssignment, Attendance, LeaveRequest, User,
+  WorkLocation, UserLocationAssignment, Attendance, LeaveRequest, User, AttendanceSetting,
 } = require('../models');
+const { withTenantWhere, requireCompanyId, isPlatformOwner } = require('../utils/tenant');
 
 const paginate = (page = 1, limit = 20) => {
   const lim = Math.min(parseInt(limit, 10) || 20, 100);
@@ -12,6 +13,27 @@ const paginate = (page = 1, limit = 20) => {
 const mkPagination = (count, page, limit) => {
   const lim = Math.min(parseInt(limit, 10) || 20, 100);
   return { page: parseInt(page, 10) || 1, limit: lim, total: count, total_pages: Math.ceil(count / lim) };
+};
+
+const parseTimeToMinutes = (value) => {
+  if (!value || typeof value !== 'string') return 0;
+  const [h = '0', m = '0'] = value.split(':');
+  return (parseInt(h, 10) || 0) * 60 + (parseInt(m, 10) || 0);
+};
+
+const getOrCreateAttendanceSettings = async (actor) => {
+  const baseWhere = withTenantWhere({}, actor);
+  let setting = await AttendanceSetting.findOne({ where: baseWhere, order: [['created_at', 'ASC']] });
+  if (!setting) {
+    const companyId = requireCompanyId(actor);
+    setting = await AttendanceSetting.create({
+      company_id: companyId,
+      work_start_time: process.env.ATTENDANCE_WORK_START_TIME || '08:00:00',
+      work_end_time: process.env.ATTENDANCE_WORK_END_TIME || '17:00:00',
+      late_grace_minutes: Number(process.env.ATTENDANCE_LATE_GRACE_MINUTES || 0),
+    });
+  }
+  return setting;
 };
 
 // ── Helper: hitung jarak GPS (Haversine) ──────────────────────────
@@ -25,42 +47,61 @@ const haversineKm = (lat1, lng1, lat2, lng2) => {
 };
 
 module.exports = {
+  // ── Attendance Settings ───────────────────────────────────────
+
+  getAttendanceSettings: async (actor) => getOrCreateAttendanceSettings(actor),
+
+  updateAttendanceSettings: async (payload, actor) => {
+    const setting = await getOrCreateAttendanceSettings(actor);
+    await setting.update({
+      work_start_time: payload.work_start_time ?? setting.work_start_time,
+      work_end_time: payload.work_end_time ?? setting.work_end_time,
+      late_grace_minutes: payload.late_grace_minutes ?? setting.late_grace_minutes,
+    });
+    return setting;
+  },
+
   // ── Work Locations ─────────────────────────────────────────────
 
-  listLocations: async () => WorkLocation.findAll({ where: { is_active: true }, order: [['name', 'ASC']] }),
+  listLocations: async (actor) => WorkLocation.findAll({ where: withTenantWhere({ is_active: true }, actor), order: [['name', 'ASC']] }),
 
-  getLocationById: async (id) => {
-    const l = await WorkLocation.findByPk(id);
+  getLocationById: async (id, actor) => {
+    const l = await WorkLocation.findOne({ where: withTenantWhere({ id }, actor) });
     if (!l) throw { message: 'Lokasi tidak ditemukan', status: 404 };
     return l;
   },
 
-  createLocation: async (payload) => WorkLocation.create(payload),
+  createLocation: async (payload, actor) => WorkLocation.create({ ...payload, company_id: requireCompanyId(actor) }),
 
-  updateLocation: async (id, payload) => {
-    const l = await WorkLocation.findByPk(id);
+  updateLocation: async (id, payload, actor) => {
+    const l = await WorkLocation.findOne({ where: withTenantWhere({ id }, actor) });
     if (!l) throw { message: 'Lokasi tidak ditemukan', status: 404 };
     await l.update(payload);
     return l;
   },
 
-  removeLocation: async (id) => {
-    const l = await WorkLocation.findByPk(id);
+  removeLocation: async (id, actor) => {
+    const l = await WorkLocation.findOne({ where: withTenantWhere({ id }, actor) });
     if (!l) throw { message: 'Lokasi tidak ditemukan', status: 404 };
     await l.update({ is_active: false }); // soft delete
   },
 
   // ── User-Location Assignments ──────────────────────────────────
 
-  listAssignments: async () => UserLocationAssignment.findAll({
+  listAssignments: async (actor) => UserLocationAssignment.findAll({
     include: [
-      { model: User, as: 'user', attributes: ['id', 'name', 'email', 'role'] },
-      { model: WorkLocation, as: 'location', attributes: ['id', 'name', 'address'] },
+      { model: User, as: 'user', attributes: ['id', 'name', 'email', 'role'], where: withTenantWhere({}, actor), required: true },
+      { model: WorkLocation, as: 'location', attributes: ['id', 'name', 'address'], where: withTenantWhere({}, actor), required: true },
     ],
     order: [['created_at', 'DESC']],
   }),
 
-  createAssignment: async ({ user_id, work_location_id }) => {
+  createAssignment: async ({ user_id, work_location_id }, actor) => {
+    const companyWhere = withTenantWhere({}, actor);
+    const user = await User.findOne({ where: { id: user_id, ...companyWhere } });
+    const location = await WorkLocation.findOne({ where: { id: work_location_id, ...companyWhere, is_active: true } });
+    if (!user || !location) throw { message: 'User/Lokasi lintas perusahaan tidak diizinkan', status: 400 };
+
     // Remove previous assignment for this user first (one-to-one)
     await UserLocationAssignment.destroy({ where: { user_id } });
     const a = await UserLocationAssignment.create({ user_id, work_location_id });
@@ -68,8 +109,11 @@ module.exports = {
     return a;
   },
 
-  removeAssignment: async (id) => {
-    const a = await UserLocationAssignment.findByPk(id);
+  removeAssignment: async (id, actor) => {
+    const a = await UserLocationAssignment.findOne({
+      where: { id },
+      include: [{ model: User, as: 'user', where: withTenantWhere({}, actor), required: true }],
+    });
     if (!a) throw { message: 'Assignment tidak ditemukan', status: 404 };
     await User.update({ work_location_id: null }, { where: { id: a.user_id } });
     await a.destroy();
@@ -77,7 +121,7 @@ module.exports = {
 
   // ── Attendances ────────────────────────────────────────────────
 
-  listAttendances: async ({ user_id, date, month, year, status, page, limit } = {}) => {
+  listAttendances: async ({ user_id, date, month, year, status, page, limit } = {}, actor) => {
     const where = {};
     if (user_id) where.user_id = user_id;
     if (date) {
@@ -99,8 +143,8 @@ module.exports = {
     const { count, rows } = await Attendance.findAndCountAll({
       where,
       include: [
-        { model: User,         as: 'user',     attributes: ['id', 'name', 'email'] },
-        { model: WorkLocation, as: 'location', attributes: ['id', 'name'] },
+        { model: User,         as: 'user',     attributes: ['id', 'name', 'email'], where: withTenantWhere({}, actor), required: true },
+        { model: WorkLocation, as: 'location', attributes: ['id', 'name'], required: false },
       ],
       order: [['attendance_date', 'DESC'], ['clock_in', 'DESC']],
       limit: capLimit,
@@ -109,24 +153,32 @@ module.exports = {
     return { data: rows, pagination: mkPagination(count, page, capLimit) };
   },
 
-  getMyAttendances: async (userId) => Attendance.findAll({
+  getMyAttendances: async (userId, actor) => Attendance.findAll({
     where: { user_id: userId },
-    include: [{ model: WorkLocation, as: 'location', attributes: ['id', 'name'] }],
+    include: [{ model: WorkLocation, as: 'location', attributes: ['id', 'name'], where: withTenantWhere({}, actor), required: false }],
     order: [['attendance_date', 'DESC']],
     limit: 30,
   }),
 
-  clockIn: async (userId, { lat, lng }) => {
+  clockIn: async (userId, payload = {}, file = null, actor) => {
+    const lat = Number(payload?.lat);
+    const lng = Number(payload?.lng);
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+      throw { message: 'Koordinat lat/lng wajib diisi', status: 400 };
+    }
     const today = new Date().toISOString().slice(0, 10);
 
     // Cek apakah sudah clock-in hari ini
-    const existing = await Attendance.findOne({ where: { user_id: userId, attendance_date: today } });
+    const existing = await Attendance.findOne({
+      where: { user_id: userId, attendance_date: today },
+      include: [{ model: User, as: 'user', where: withTenantWhere({}, actor), required: true }],
+    });
     if (existing) throw { message: 'Anda sudah clock-in hari ini', status: 400 };
 
     // Cek apakah user punya assignment lokasi
     const assignment = await UserLocationAssignment.findOne({
       where: { user_id: userId },
-      include: [{ model: WorkLocation, as: 'location', where: { is_active: true } }],
+      include: [{ model: WorkLocation, as: 'location', where: withTenantWhere({ is_active: true }, actor), required: true }],
     });
 
     let workLocationId = null;
@@ -153,7 +205,10 @@ module.exports = {
 
     const now = new Date();
     const time = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}:${String(now.getSeconds()).padStart(2,'0')}`;
-    const status = now.getHours() > 8 || (now.getHours() === 8 && now.getMinutes() > 0) ? 'Terlambat' : 'Hadir';
+    const setting = await getOrCreateAttendanceSettings(actor);
+    const nowMinutes = now.getHours() * 60 + now.getMinutes();
+    const thresholdMinutes = parseTimeToMinutes(setting.work_start_time) + Number(setting.late_grace_minutes || 0);
+    const status = nowMinutes > thresholdMinutes ? 'Terlambat' : 'Hadir';
 
     return Attendance.create({
       user_id: userId,
@@ -162,28 +217,73 @@ module.exports = {
       clock_in: time,
       clock_in_lat: lat,
       clock_in_lng: lng,
+      clock_in_photo: file ? `/uploads/attendance/${file.filename}` : null,
       status,
     });
   },
 
-  clockOut: async (userId, { lat, lng }) => {
+  clockOut: async (userId, payload = {}, file = null, actor) => {
+    const lat = Number(payload?.lat);
+    const lng = Number(payload?.lng);
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+      throw { message: 'Koordinat lat/lng wajib diisi', status: 400 };
+    }
     const today = new Date().toISOString().slice(0, 10);
-    const att = await Attendance.findOne({ where: { user_id: userId, attendance_date: today } });
+    const att = await Attendance.findOne({
+      where: { user_id: userId, attendance_date: today },
+      include: [{ model: User, as: 'user', where: withTenantWhere({}, actor), required: true }],
+    });
     if (!att) throw { message: 'Belum clock-in hari ini', status: 400 };
     if (att.clock_out) throw { message: 'Sudah clock-out hari ini', status: 400 };
 
     const now = new Date();
     const time = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}:${String(now.getSeconds()).padStart(2,'0')}`;
-    await att.update({ clock_out: time, clock_out_lat: lat, clock_out_lng: lng });
+    await att.update({
+      clock_out: time,
+      clock_out_lat: lat,
+      clock_out_lng: lng,
+      ...(file ? { clock_out_photo: `/uploads/attendance/${file.filename}` } : {}),
+    });
     return att;
   },
 
   // ── Leave Requests ─────────────────────────────────────────────
 
-  listLeaveRequests: async ({ page, limit } = {}) => {
+  listLeaveRequests: async ({ page, limit, status, type, user_id, search, start_date, end_date, date } = {}, actor) => {
+    const where = {};
+    if (status) where.status = status;
+    if (type) where.type = type;
+    if (user_id) where.user_id = user_id;
+    if (date) {
+      where.start_date = { [Op.lte]: date };
+      where.end_date = { [Op.gte]: date };
+    } else {
+      if (start_date) where.end_date = { ...(where.end_date || {}), [Op.gte]: start_date };
+      if (end_date) where.start_date = { ...(where.start_date || {}), [Op.lte]: end_date };
+    }
+
+    const userWhere = search
+      ? {
+          [Op.or]: [
+            { name: { [Op.like]: `%${search}%` } },
+            { email: { [Op.like]: `%${search}%` } },
+          ],
+        }
+      : undefined;
+
     const { count, rows } = await LeaveRequest.findAndCountAll({
+      where,
       include: [
-        { model: User, as: 'user',     attributes: ['id', 'name', 'email'] },
+        {
+          model: User,
+          as: 'user',
+          attributes: ['id', 'name', 'email'],
+          where: {
+            ...(userWhere || {}),
+            ...withTenantWhere({}, actor),
+          },
+          required: true,
+        },
         { model: User, as: 'approver', attributes: ['id', 'name'] },
       ],
       order: [['created_at', 'DESC']],
@@ -192,30 +292,62 @@ module.exports = {
     return { data: rows, pagination: mkPagination(count, page, limit) };
   },
 
-  getMyLeaveRequests: async (userId) => LeaveRequest.findAll({
+  getMyLeaveRequests: async (userId, actor) => LeaveRequest.findAll({
     where: { user_id: userId },
     include: [{ model: User, as: 'approver', attributes: ['id', 'name'] }],
     order: [['created_at', 'DESC']],
   }),
 
-  createLeaveRequest: async (userId, payload) => LeaveRequest.create({ ...payload, user_id: userId }),
+  createLeaveRequest: async (requester, payload, actor) => {
+    const isSuperAdmin = requester?.role === 'Super Admin';
+    const targetUserId = isSuperAdmin && payload.user_id ? payload.user_id : requester.id;
 
-  approveLeaveRequest: async (id, approverId) => {
-    const r = await LeaveRequest.findByPk(id);
+    const targetUser = await User.findOne({ where: withTenantWhere({ id: targetUserId }, actor) });
+    if (!targetUser) throw { message: 'User target lintas perusahaan tidak diizinkan', status: 400 };
+
+    const body = {
+      type: payload.type,
+      start_date: payload.start_date,
+      end_date: payload.end_date,
+      reason: payload.reason,
+      attachment: payload.attachment,
+      user_id: targetUserId,
+    };
+
+    if (isSuperAdmin && payload.user_id) {
+      body.status = 'Disetujui';
+      body.approved_by = requester.id;
+      body.approved_at = new Date();
+    }
+
+    return LeaveRequest.create(body);
+  },
+
+  approveLeaveRequest: async (id, approverId, actor) => {
+    const r = await LeaveRequest.findOne({
+      where: { id },
+      include: [{ model: User, as: 'user', where: withTenantWhere({}, actor), required: true }],
+    });
     if (!r) throw { message: 'Pengajuan tidak ditemukan', status: 404 };
     await r.update({ status: 'Disetujui', approved_by: approverId, approved_at: new Date() });
     return r;
   },
 
-  rejectLeaveRequest: async (id, approverId) => {
-    const r = await LeaveRequest.findByPk(id);
+  rejectLeaveRequest: async (id, approverId, actor) => {
+    const r = await LeaveRequest.findOne({
+      where: { id },
+      include: [{ model: User, as: 'user', where: withTenantWhere({}, actor), required: true }],
+    });
     if (!r) throw { message: 'Pengajuan tidak ditemukan', status: 404 };
     await r.update({ status: 'Ditolak', approved_by: approverId, approved_at: new Date() });
     return r;
   },
 
-  removeLeaveRequest: async (id, userId) => {
-    const r = await LeaveRequest.findByPk(id);
+  removeLeaveRequest: async (id, userId, actor) => {
+    const r = await LeaveRequest.findOne({
+      where: { id },
+      include: [{ model: User, as: 'user', where: withTenantWhere({}, actor), required: true }],
+    });
     if (!r) throw { message: 'Pengajuan tidak ditemukan', status: 404 };
     if (r.status !== 'Menunggu') throw { message: 'Hanya pengajuan berstatus Menunggu yang dapat dihapus', status: 400 };
     await r.destroy();

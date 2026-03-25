@@ -1,24 +1,29 @@
 'use strict';
 
 const { v4: uuidv4 } = require('uuid');
+const { getDefaultCompanyId } = require('../utils/seed-helper');
 
 /** @type {import('sequelize-cli').Migration} */
 module.exports = {
   async up(queryInterface) {
-    // ── Lookup: users & projects ────────────────────────────────
+    const companyId = await getDefaultCompanyId(queryInterface);
+
+    // ── Lookup: users & projects dari tenant yang sama (company default) ──
     const [users] = await queryInterface.sequelize.query(
-      `SELECT id, name FROM users ORDER BY name`
+      `SELECT id, name FROM users WHERE company_id = ? AND role != 'Platform Owner' ORDER BY name`,
+      { replacements: [companyId] }
     );
     if (users.length === 0) {
-      console.log('⚠  Tidak ada user, skip seeder SOP.');
+      console.log('⚠  Tidak ada user tenant, skip seeder SOP.');
       return;
     }
 
     const [projects] = await queryInterface.sequelize.query(
-      `SELECT id, name FROM projects ORDER BY name LIMIT 2`
+      `SELECT id, name FROM projects WHERE company_id = ? ORDER BY name LIMIT 2`,
+      { replacements: [companyId] }
     );
     if (projects.length === 0) {
-      console.log('⚠  Tidak ada project, skip seeder SOP.');
+      console.log('⚠  Tidak ada project untuk tenant ini, skip seeder SOP.');
       return;
     }
 

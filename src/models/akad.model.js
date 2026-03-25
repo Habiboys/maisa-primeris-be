@@ -13,6 +13,7 @@ module.exports = (sequelize, DataTypes) => {
     housing_unit_id: DataTypes.UUID,
     consumer_id    : DataTypes.UUID,
     ppjb_id        : DataTypes.UUID,
+    company_id     : DataTypes.UUID,
     nomor_akad     : DataTypes.STRING(100),
     tanggal_akad   : DataTypes.DATEONLY,
     bank           : DataTypes.STRING(80),

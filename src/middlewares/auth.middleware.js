@@ -18,14 +18,24 @@ const authenticate = async (req, res, next) => {
     const payload = jwt.verify(token, process.env.JWT_SECRET);
 
     const user = await User.findByPk(payload.id, {
-      attributes: ['id', 'name', 'email', 'role', 'status', 'work_location_id'],
+      attributes: ['id', 'name', 'email', 'role', 'status', 'company_id', 'work_location_id'],
     });
 
     if (!user || user.status !== 'Aktif') {
       return res_.unauthorized(res, 'Akun tidak aktif atau tidak ditemukan');
     }
 
-    req.user = user;
+    // Simpan sebagai plain object agar company_id selalu ada di setiap request
+    const plain = user.get ? user.get({ plain: true }) : user.toJSON ? user.toJSON() : user;
+    req.user = {
+      id: plain.id,
+      name: plain.name,
+      email: plain.email,
+      role: plain.role,
+      status: plain.status,
+      company_id: plain.company_id ?? null,
+      work_location_id: plain.work_location_id ?? null,
+    };
     next();
   } catch (err) {
     return res_.unauthorized(res, 'Token tidak valid atau sudah kadaluarsa');
@@ -37,6 +47,9 @@ const authenticate = async (req, res, next) => {
  * Usage: authorize('Admin', 'Manajer')
  */
 const authorize = (...roles) => (req, res, next) => {
+  // Platform Owner can access all guarded resources
+  if (req.user?.role === 'Platform Owner') return next();
+
   if (!roles.includes(req.user?.role)) {
     return res_.forbidden(res, 'Anda tidak memiliki akses ke resource ini');
   }

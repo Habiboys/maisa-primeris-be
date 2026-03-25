@@ -10,6 +10,7 @@ module.exports = (sequelize, DataTypes) => {
   }
   WorkLocation.init({
     id       : { type: DataTypes.UUID, defaultValue: DataTypes.UUIDV4, primaryKey: true },
+    company_id: DataTypes.UUID,
     name     : { type: DataTypes.STRING(150), allowNull: false },
     address  : DataTypes.TEXT,
     latitude : DataTypes.DECIMAL(10,8),

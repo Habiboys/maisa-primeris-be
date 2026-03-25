@@ -17,6 +17,7 @@ module.exports = (sequelize, DataTypes) => {
     reference_no    : DataTypes.STRING(100),
     attachment      : DataTypes.STRING(255),
     project_id      : DataTypes.UUID,
+    company_id      : DataTypes.UUID,
     created_by      : DataTypes.UUID,
   }, { sequelize, modelName: 'Transaction', tableName: 'transactions', underscored: true });
   return Transaction;

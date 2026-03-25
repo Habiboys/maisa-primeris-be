@@ -3,10 +3,11 @@
 const router = require('express').Router();
 const ctrl   = require('../controllers/user.controller');
 const { authenticate, authorize } = require('../middlewares/auth.middleware');
+const { ensureTenantContext } = require('../middlewares/tenant.middleware');
 
 const SA = authorize('Super Admin');
 
-router.use(authenticate);
+router.use(authenticate, ensureTenantContext);
 
 // Fixed-path routes MUST come before /:id
 router.get('/activity-logs', SA, ctrl.activityLogs);

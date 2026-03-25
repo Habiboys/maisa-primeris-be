@@ -3,10 +3,11 @@
 const router = require('express').Router();
 const ctrl   = require('../controllers/marketing.controller');
 const { authenticate, authorize } = require('../middlewares/auth.middleware');
+const { ensureTenantContext } = require('../middlewares/tenant.middleware');
 
 const SA = authorize('Super Admin');
 
-router.use(authenticate);
+router.use(authenticate, ensureTenantContext);
 
 // Leads (fixed paths first)
 router.get   ('/leads/stats', SA, ctrl.getLeadStats);

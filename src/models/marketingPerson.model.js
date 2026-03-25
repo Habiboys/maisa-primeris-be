@@ -9,6 +9,7 @@ module.exports = (sequelize, DataTypes) => {
   }
   MarketingPerson.init({
     id       : { type: DataTypes.UUID, defaultValue: DataTypes.UUIDV4, primaryKey: true },
+    company_id: DataTypes.UUID,
     user_id  : DataTypes.UUID,
     name     : { type: DataTypes.STRING(100), allowNull: false },
     phone    : DataTypes.STRING(20),

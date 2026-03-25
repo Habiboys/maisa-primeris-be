@@ -13,6 +13,7 @@ module.exports = (sequelize, DataTypes) => {
     housing_unit_id: DataTypes.UUID,
     consumer_id    : DataTypes.UUID,
     akad_id        : DataTypes.UUID,
+    company_id     : DataTypes.UUID,
     nomor_bast     : DataTypes.STRING(100),
     tanggal_bast   : DataTypes.DATEONLY,
     status         : { type: DataTypes.ENUM('Draft','Ditandatangani','Batal'), defaultValue: 'Draft' },

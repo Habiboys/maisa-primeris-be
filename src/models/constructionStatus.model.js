@@ -8,7 +8,8 @@ module.exports = (sequelize, DataTypes) => {
   }
   ConstructionStatus.init({
     id         : { type: DataTypes.UUID, defaultValue: DataTypes.UUIDV4, primaryKey: true },
-    name       : { type: DataTypes.STRING(100), allowNull: false, unique: true },
+    company_id : DataTypes.UUID,
+    name       : { type: DataTypes.STRING(100), allowNull: false },
     color      : DataTypes.STRING(20),
     progress   : { type: DataTypes.INTEGER, defaultValue: 0 },
     order_index: { type: DataTypes.INTEGER, defaultValue: 0 },

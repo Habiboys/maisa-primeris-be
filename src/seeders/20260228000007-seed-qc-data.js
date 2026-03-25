@@ -1,38 +1,24 @@
 'use strict';
 
 const { v4: uuidv4 } = require('uuid');
+const { getDefaultCompanyId } = require('../utils/seed-helper');
 
 /**
- * Seeder: Quality Control — template, sections, items, submissions & results
- *
- * Membuat 2 template QC:
- *  1. "Checklist Bangunan Rumah Tipe 36" — inspeksi rumah tipe kecil
- *  2. "Checklist Bangunan Rumah Tipe 45" — inspeksi rumah tipe sedang
- *
- * Masing-masing template memiliki beberapa section dan item checklist.
- * Kemudian dibuatkan contoh submission + hasil inspeksi.
- *
- * Cara jalankan:
- *   npx sequelize-cli db:seed --seed 20260228000007-seed-qc-data.js
- *
- * Cara undo:
- *   npx sequelize-cli db:seed:undo --seed 20260228000007-seed-qc-data.js
+ * Seeder: Quality Control — template, sections, items, submissions & results (per tenant)
  */
 
 module.exports = {
   async up(queryInterface) {
+    const companyId = await getDefaultCompanyId(queryInterface);
     const now = new Date();
 
-    // ═══════════════════════════════════════════════════════════
-    // 1. QC TEMPLATES
-    // ═══════════════════════════════════════════════════════════
-
-    const TEMPLATE_1 = uuidv4(); // Tipe 36
-    const TEMPLATE_2 = uuidv4(); // Tipe 45
+    const TEMPLATE_1 = uuidv4();
+    const TEMPLATE_2 = uuidv4();
 
     const templates = [
       {
         id: TEMPLATE_1,
+        company_id: companyId,
         name: 'Checklist Bangunan Rumah Tipe 36',
         description: 'Formulir inspeksi quality control untuk unit rumah tipe 36/60. Mencakup pemeriksaan pondasi, struktur, dinding, atap, plumbing, kelistrikan, dan finishing.',
         is_active: true,
@@ -41,6 +27,7 @@ module.exports = {
       },
       {
         id: TEMPLATE_2,
+        company_id: companyId,
         name: 'Checklist Bangunan Rumah Tipe 45',
         description: 'Formulir inspeksi quality control untuk unit rumah tipe 45/72. Mencakup pemeriksaan pondasi, struktur, dinding, atap, plumbing, kelistrikan, finishing, dan area carport.',
         is_active: true,

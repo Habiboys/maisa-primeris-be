@@ -1,15 +1,25 @@
 'use strict';
 
 const { v4: uuidv4 } = require('uuid');
+const { getDefaultCompanyId } = require('../utils/seed-helper');
 
 /**
- * Seeder: Unit Statuses — peta siteplan unit (40 kavling)
- * Status sesuai ENUM: Tersedia, Indent, Booking, Sold, Batal
+ * Seeder: Unit Statuses — peta siteplan unit (40 kavling), per tenant
  */
 
 module.exports = {
   async up(queryInterface) {
+    const companyId = await getDefaultCompanyId(queryInterface);
     const now = new Date();
+
+    // Ambil housing_units yang sudah di-seed untuk mapping ke housing_unit_id
+    const [housingUnits] = await queryInterface.sequelize.query(
+      'SELECT id, unit_code FROM housing_units ORDER BY unit_code ASC'
+    );
+    const findHousingId = (code) => {
+      const found = housingUnits.find((u) => u.unit_code === code);
+      return found ? found.id : null;
+    };
 
     const statuses = [];
     for (let i = 0; i < 40; i++) {
@@ -24,8 +34,10 @@ module.exports = {
 
       statuses.push({
         id: uuidv4(),
+        company_id: companyId,
         unit_code: code,
         project_id: null,
+        housing_unit_id: findHousingId(code),
         status,
         consumer_id: null,
         price: 750000000,
