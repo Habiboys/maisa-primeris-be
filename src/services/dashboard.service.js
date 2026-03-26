@@ -3,7 +3,7 @@
 const { Op, fn, col, literal, QueryTypes } = require('sequelize');
 const sequelize = require('../models').sequelize;
 const {
-  Transaction, HousingUnit, Consumer, Lead, Attendance, MarketingPerson,
+  Transaction, HousingUnit, Consumer, Lead, Attendance, MarketingPerson, Project,
 } = require('../models');
 const { withTenantWhere } = require('../utils/tenant');
 
@@ -88,11 +88,16 @@ module.exports = {
   // ── Budget vs Actual ──────────────────────────────────────────
   getBudgetVsActual: async (actor) => {
     const months = 6;
+    const tenantWhere = withTenantWhere({}, actor);
+    const totalBudgetRaw = await Project.sum('budget_cap', { where: tenantWhere });
+    const totalBudget = Number(totalBudgetRaw) || 0;
+    const budgetPerMonth = months > 0 ? Math.round(totalBudget / months) : 0;
+
     const rows = await module.exports.getCashflow(months, actor);
     return rows.map(r => ({
-      month : r.month,
-      budget: Math.round(r.keluar * 1.1),  // asumsi budget 10% di atas realisasi
-      actual: r.keluar,
+      month      : r.month,
+      pagu       : budgetPerMonth,
+      realisasi  : r.keluar,
     }));
   },
 };

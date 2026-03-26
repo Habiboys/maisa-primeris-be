@@ -14,6 +14,7 @@ const projectSchema = Joi.object({
   unit_tipe: Joi.string().max(50).allow(null, ""),
   status: Joi.string().valid("On Progress", "Completed", "Delayed"),
   deadline: Joi.string().max(50).allow(null, ""),
+  budget_cap: Joi.number().integer().min(0).allow(null, ""),
   description: Joi.string().allow(null, ""),
 });
 

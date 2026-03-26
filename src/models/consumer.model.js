@@ -3,8 +3,10 @@ const { Model } = require('sequelize');
 module.exports = (sequelize, DataTypes) => {
   class Consumer extends Model {
     static associate(models) {
+      Consumer.belongsTo(models.Lead, { foreignKey: 'lead_id', as: 'sourceLead' });
       Consumer.hasMany(models.PaymentHistory, { foreignKey: 'consumer_id', as: 'payments' });
       Consumer.hasMany(models.HousingUnit,    { foreignKey: 'consumer_id', as: 'housingUnits' });
+      Consumer.hasMany(models.Lead,           { foreignKey: 'consumer_id', as: 'convertedLeads' });
     }
   }
   Consumer.init({
@@ -16,6 +18,7 @@ module.exports = (sequelize, DataTypes) => {
     address       : DataTypes.TEXT,
     unit_code     : DataTypes.STRING(50),
     project_id    : DataTypes.UUID,
+    lead_id       : DataTypes.UUID,
     company_id    : DataTypes.UUID,
     total_price   : DataTypes.BIGINT,
     paid_amount   : { type: DataTypes.BIGINT, defaultValue: 0 },

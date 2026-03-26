@@ -1,7 +1,7 @@
 'use strict';
 
 const { Op }       = require('sequelize');
-const { Transaction, Consumer, PaymentHistory, User, HousingUnit } = require('../models');
+const { sequelize, Transaction, Consumer, PaymentHistory, User, HousingUnit, Lead, MarketingPerson } = require('../models');
 const { withTenantWhere, requireCompanyId, isPlatformOwner, stripCompanyId } = require('../utils/tenant');
 
 const paginate = (page = 1, limit = 20) => {
@@ -121,27 +121,119 @@ module.exports = {
   },
 
   createConsumer: async (payload, actor) => {
-    const { housing_unit_id, ...rest } = payload;
-    const consumer = await Consumer.create({ ...rest, company_id: requireCompanyId(actor) });
-    if (housing_unit_id) {
-      const unit = await HousingUnit.findOne({ where: withTenantWhere({ id: housing_unit_id }, actor) });
-      if (unit) await unit.update({ consumer_id: consumer.id });
+    const lead_id = payload.lead_id;
+    if (!lead_id) {
+      throw { message: 'lead_id wajib. Data konsumen piutang hanya boleh dibuat dari lead Deal.', status: 400 };
     }
-    return consumer;
+
+    const companyId = requireCompanyId(actor);
+    const safe = stripCompanyId(payload);
+    const nik = safe.nik ?? null;
+    const address = safe.address ?? null;
+    const payment_scheme = safe.payment_scheme ?? null;
+
+    const t = await sequelize.transaction();
+    try {
+      const lead = await Lead.findOne({
+        where: { id: lead_id, status: 'Deal', consumer_id: null },
+        include: [
+          { model: MarketingPerson, as: 'marketingPerson', where: withTenantWhere({}, actor), required: true },
+          { model: HousingUnit, as: 'housingUnit', required: false },
+        ],
+        transaction: t,
+      });
+      if (!lead) throw { message: 'Lead tidak ditemukan, sudah bukan Deal, atau sudah ditautkan ke piutang.', status: 400 };
+      if (!lead.housing_unit_id) {
+        throw { message: 'Lead Deal harus memiliki unit kavling sebelum dibuat piutang.', status: 400 };
+      }
+
+      const unit = await HousingUnit.findOne({
+        where: withTenantWhere({ id: lead.housing_unit_id }, actor),
+        transaction: t,
+      });
+      if (!unit) throw { message: 'Unit kavling pada lead tidak ditemukan.', status: 404 };
+      if (unit.consumer_id) {
+        throw { message: 'Unit kavling ini sudah terikat ke konsumen/piutang lain.', status: 400 };
+      }
+      if (unit.reserved_lead_id !== lead.id) {
+        throw { message: 'Unit harus terkunci oleh lead ini sebelum dibuat piutang.', status: 400 };
+      }
+      if (unit.status !== 'Proses') {
+        throw { message: 'Unit harus berstatus Proses sebelum dibuat piutang.', status: 400 };
+      }
+      if (unit.harga_jual == null) {
+        throw { message: 'Unit kavling belum memiliki harga jual. Lengkapi data kavling di modul Perumahan.', status: 400 };
+      }
+
+      const consumer = await Consumer.create({
+        company_id: companyId,
+        lead_id: lead.id,
+        name: lead.name,
+        phone: lead.phone || null,
+        email: lead.email || null,
+        nik,
+        address,
+        unit_code: unit.unit_code,
+        project_id: unit.project_id || lead.project_id || null,
+        total_price: unit.harga_jual,
+        payment_scheme,
+        paid_amount: 0,
+        status: 'Aktif',
+      }, { transaction: t });
+
+      await unit.update({ consumer_id: consumer.id }, { transaction: t });
+      const [n] = await Lead.update(
+        { consumer_id: consumer.id },
+        { where: { id: lead_id, consumer_id: null }, transaction: t },
+      );
+      if (!n) throw { message: 'Lead sudah digunakan piutang lain. Muat ulang daftar lead.', status: 409 };
+
+      await t.commit();
+      return consumer;
+    } catch (e) {
+      await t.rollback();
+      throw e;
+    }
   },
 
   updateConsumer: async (id, payload, actor) => {
     const c = await Consumer.findOne({ where: withTenantWhere({ id }, actor) });
     if (!c) throw { message: 'Konsumen tidak ditemukan', status: 404 };
-    await c.update(stripCompanyId(payload));
+    const safe = stripCompanyId(payload);
+    const allowed = {};
+    for (const key of ['nik', 'address', 'payment_scheme', 'status']) {
+      if (safe[key] !== undefined) allowed[key] = safe[key];
+    }
+    await c.update(allowed);
     return c;
   },
 
   removeConsumer: async (id, actor) => {
-    const c = await Consumer.findOne({ where: withTenantWhere({ id }, actor) });
-    if (!c) throw { message: 'Konsumen tidak ditemukan', status: 404 };
-    await PaymentHistory.destroy({ where: { consumer_id: id } });
-    await c.destroy();
+    const t = await sequelize.transaction();
+    try {
+      const c = await Consumer.findOne({ where: withTenantWhere({ id }, actor), transaction: t });
+      if (!c) throw { message: 'Konsumen tidak ditemukan', status: 404 };
+
+      await PaymentHistory.destroy({ where: { consumer_id: id }, transaction: t });
+      await Lead.update({ consumer_id: null }, { where: { consumer_id: id }, transaction: t });
+
+      // Setelah semua pembayaran dihapus, unit tidak lagi Sold.
+      const unit = await HousingUnit.findOne({
+        where: withTenantWhere({ consumer_id: id }, actor),
+        transaction: t,
+      });
+      const nextUnitStatus = unit?.reserved_lead_id ? 'Proses' : 'Tersedia';
+
+      await HousingUnit.update(
+        { consumer_id: null, status: nextUnitStatus },
+        { where: withTenantWhere({ consumer_id: id }, actor), transaction: t },
+      );
+      await c.destroy({ transaction: t });
+      await t.commit();
+    } catch (e) {
+      await t.rollback();
+      throw e;
+    }
   },
 
   exportConsumers: async ({ search, blok } = {}, actor) => {
@@ -172,58 +264,157 @@ module.exports = {
   },
 
   createPayment: async (consumerId, payload, actor) => {
-    const c = await Consumer.findOne({ where: withTenantWhere({ id: consumerId }, actor) });
-    if (!c) throw { message: 'Konsumen tidak ditemukan', status: 404 };
-    const debit = payload.debit != null ? Number(payload.debit) : (payload.amount >= 0 ? Number(payload.amount) : 0);
-    const credit = payload.credit != null ? Number(payload.credit) : (payload.amount < 0 ? -Number(payload.amount) : 0);
-    const amount = debit - credit;
-    const transaction_category = debit > 0 ? 'Debit' : (credit > 0 ? 'Kredit' : 'Debit');
-    const createPayload = {
-      consumer_id: consumerId,
-      payment_date: payload.payment_date,
-      payment_method: payload.payment_method,
-      notes: payload.notes,
-      debit,
-      credit,
-      amount,
-      estimasi_date: payload.estimasi_date || null,
-      transaction_name: payload.transaction_name || payload.notes || null,
-      transaction_category,
-      category: payload.category || null,
-    };
-    const payment = await PaymentHistory.create(createPayload);
-    const total = await PaymentHistory.sum('amount', { where: { consumer_id: consumerId } });
-    await c.update({ paid_amount: total || 0 });
-    return payment;
+    const t = await sequelize.transaction();
+    try {
+      const c = await Consumer.findOne({
+        where: withTenantWhere({ id: consumerId }, actor),
+        transaction: t,
+      });
+      if (!c) throw { message: 'Konsumen tidak ditemukan', status: 404 };
+
+      const debit = payload.debit != null ? Number(payload.debit) : (payload.amount >= 0 ? Number(payload.amount) : 0);
+      const credit = payload.credit != null ? Number(payload.credit) : (payload.amount < 0 ? -Number(payload.amount) : 0);
+      const amount = debit - credit;
+      const transaction_category = debit > 0 ? 'Debit' : (credit > 0 ? 'Kredit' : 'Debit');
+
+      const createPayload = {
+        consumer_id: consumerId,
+        payment_date: payload.payment_date,
+        payment_method: payload.payment_method,
+        notes: payload.notes,
+        debit,
+        credit,
+        amount,
+        estimasi_date: payload.estimasi_date || null,
+        transaction_name: payload.transaction_name || payload.notes || null,
+        transaction_category,
+        category: payload.category || null,
+      };
+
+      const payment = await PaymentHistory.create(createPayload, { transaction: t });
+      const total = await PaymentHistory.sum('amount', { where: { consumer_id: consumerId }, transaction: t });
+
+      const paid_amount = total || 0;
+      const total_price = c.total_price != null ? Number(c.total_price) : 0;
+      const isLunas = total_price > 0 && Number(paid_amount) >= total_price;
+
+      const nextConsumerStatus = isLunas ? 'Lunas' : (c.status === 'Dibatalkan' ? 'Dibatalkan' : 'Aktif');
+      await c.update({ paid_amount, status: nextConsumerStatus }, { transaction: t });
+
+      // Sinkronisasi unit: Sold hanya jika lunas; kalau belum lunas kembali Proses/Tersedia.
+      const housingUnit = await HousingUnit.findOne({
+        where: withTenantWhere({ consumer_id: consumerId }, actor),
+        transaction: t,
+      });
+      if (housingUnit) {
+        const nextHousingStatus = isLunas
+          ? 'Sold'
+          : (housingUnit.reserved_lead_id ? 'Proses' : 'Tersedia');
+        await housingUnit.update({ status: nextHousingStatus }, { transaction: t });
+      }
+
+      await t.commit();
+      return payment;
+    } catch (e) {
+      await t.rollback();
+      throw e;
+    }
   },
 
   updatePayment: async (consumerId, paymentId, payload, actor) => {
-    const c = await Consumer.findOne({ where: withTenantWhere({ id: consumerId }, actor) });
-    if (!c) throw { message: 'Konsumen tidak ditemukan', status: 404 };
-    const p = await PaymentHistory.findOne({ where: { id: paymentId, consumer_id: consumerId } });
-    if (!p) throw { message: 'Riwayat pembayaran tidak ditemukan', status: 404 };
-    const updateData = { ...payload };
-    if (payload.debit != null || payload.credit != null) {
-      const debit = payload.debit != null ? Number(payload.debit) : (p.debit ?? 0);
-      const credit = payload.credit != null ? Number(payload.credit) : (p.credit ?? 0);
-      updateData.amount = debit - credit;
-      updateData.debit = debit;
-      updateData.credit = credit;
-      updateData.transaction_category = debit > 0 ? 'Debit' : (credit > 0 ? 'Kredit' : 'Debit');
+    const t = await sequelize.transaction();
+    try {
+      const c = await Consumer.findOne({
+        where: withTenantWhere({ id: consumerId }, actor),
+        transaction: t,
+      });
+      if (!c) throw { message: 'Konsumen tidak ditemukan', status: 404 };
+
+      const p = await PaymentHistory.findOne({
+        where: { id: paymentId, consumer_id: consumerId },
+        transaction: t,
+      });
+      if (!p) throw { message: 'Riwayat pembayaran tidak ditemukan', status: 404 };
+
+      const updateData = { ...payload };
+      if (payload.debit != null || payload.credit != null) {
+        const debit = payload.debit != null ? Number(payload.debit) : (p.debit ?? 0);
+        const credit = payload.credit != null ? Number(payload.credit) : (p.credit ?? 0);
+        updateData.amount = debit - credit;
+        updateData.debit = debit;
+        updateData.credit = credit;
+        updateData.transaction_category = debit > 0 ? 'Debit' : (credit > 0 ? 'Kredit' : 'Debit');
+      }
+
+      await p.update(updateData, { transaction: t });
+
+      const total = await PaymentHistory.sum('amount', { where: { consumer_id: consumerId }, transaction: t });
+      const paid_amount = total || 0;
+      const total_price = c.total_price != null ? Number(c.total_price) : 0;
+      const isLunas = total_price > 0 && Number(paid_amount) >= total_price;
+
+      const nextConsumerStatus = isLunas ? 'Lunas' : (c.status === 'Dibatalkan' ? 'Dibatalkan' : 'Aktif');
+      await c.update({ paid_amount, status: nextConsumerStatus }, { transaction: t });
+
+      const housingUnit = await HousingUnit.findOne({
+        where: withTenantWhere({ consumer_id: consumerId }, actor),
+        transaction: t,
+      });
+      if (housingUnit) {
+        const nextHousingStatus = isLunas
+          ? 'Sold'
+          : (housingUnit.reserved_lead_id ? 'Proses' : 'Tersedia');
+        await housingUnit.update({ status: nextHousingStatus }, { transaction: t });
+      }
+
+      await t.commit();
+      return p;
+    } catch (e) {
+      await t.rollback();
+      throw e;
     }
-    await p.update(updateData);
-    const total = await PaymentHistory.sum('amount', { where: { consumer_id: consumerId } });
-    await Consumer.update({ paid_amount: total || 0 }, { where: { id: consumerId } });
-    return p;
   },
 
   removePayment: async (consumerId, paymentId, actor) => {
-    const c = await Consumer.findOne({ where: withTenantWhere({ id: consumerId }, actor) });
-    if (!c) throw { message: 'Konsumen tidak ditemukan', status: 404 };
-    const p = await PaymentHistory.findOne({ where: { id: paymentId, consumer_id: consumerId } });
-    if (!p) throw { message: 'Riwayat pembayaran tidak ditemukan', status: 404 };
-    await p.destroy();
-    const total = await PaymentHistory.sum('amount', { where: { consumer_id: consumerId } });
-    await Consumer.update({ paid_amount: total || 0 }, { where: { id: consumerId } });
+    const t = await sequelize.transaction();
+    try {
+      const c = await Consumer.findOne({
+        where: withTenantWhere({ id: consumerId }, actor),
+        transaction: t,
+      });
+      if (!c) throw { message: 'Konsumen tidak ditemukan', status: 404 };
+
+      const p = await PaymentHistory.findOne({
+        where: { id: paymentId, consumer_id: consumerId },
+        transaction: t,
+      });
+      if (!p) throw { message: 'Riwayat pembayaran tidak ditemukan', status: 404 };
+
+      await p.destroy({ transaction: t });
+
+      const total = await PaymentHistory.sum('amount', { where: { consumer_id: consumerId }, transaction: t });
+      const paid_amount = total || 0;
+      const total_price = c.total_price != null ? Number(c.total_price) : 0;
+      const isLunas = total_price > 0 && Number(paid_amount) >= total_price;
+
+      const nextConsumerStatus = isLunas ? 'Lunas' : (c.status === 'Dibatalkan' ? 'Dibatalkan' : 'Aktif');
+      await c.update({ paid_amount, status: nextConsumerStatus }, { transaction: t });
+
+      const housingUnit = await HousingUnit.findOne({
+        where: withTenantWhere({ consumer_id: consumerId }, actor),
+        transaction: t,
+      });
+      if (housingUnit) {
+        const nextHousingStatus = isLunas
+          ? 'Sold'
+          : (housingUnit.reserved_lead_id ? 'Proses' : 'Tersedia');
+        await housingUnit.update({ status: nextHousingStatus }, { transaction: t });
+      }
+
+      await t.commit();
+    } catch (e) {
+      await t.rollback();
+      throw e;
+    }
   },
 };

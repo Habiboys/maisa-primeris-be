@@ -354,6 +354,20 @@ const svc = {
           }));
           await QcSubmissionResult.bulkCreate(rows, { transaction: t });
         }
+
+        // Recalculate unit QC readiness (penting untuk kasus simpan draft berkali-kali)
+        if (submission.unit_id) {
+          const normalized = (payload.results || []).map((r) => normalizeResult(r.result || r.status));
+          const total = normalized.length;
+          const checkedCount = normalized.filter((r) => r !== null).length;
+          const failCount = normalized.filter((r) => r === 'Not OK').length;
+          const qc_readiness = total > 0 ? Math.round((checkedCount / total) * 100) : 0;
+          const qc_status = failCount > 0 ? 'Fail' : (checkedCount === total && total > 0 ? 'Pass' : 'Ongoing');
+          await ProjectUnit.update(
+            { qc_readiness, qc_status },
+            { where: { id: submission.unit_id }, transaction: t }
+          );
+        }
       }
       return submission;
     });

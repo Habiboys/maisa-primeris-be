@@ -15,8 +15,20 @@ module.exports = {
 
   updateMe: async (req, res) => {
     try {
-      const logoPath = req.file ? `/uploads/company-branding/${req.file.filename}` : null;
-      const data = await svc.updateForCurrentUser(req.user, req.body, logoPath);
+      const logoFile = req.files?.logo?.[0];
+      const faviconFile = req.files?.favicon?.[0];
+      const logoPath = logoFile ? `/uploads/company-branding/${logoFile.filename}` : null;
+      const faviconPath = faviconFile ? `/uploads/company-branding/${faviconFile.filename}` : null;
+
+      // Validasi tenant context seperti implementasi lama
+      if (req.user.role === 'Platform Owner' && !req.user.company_id) {
+        throw { message: 'Platform Owner tidak terikat company. Gunakan endpoint setting per company.', status: 400 };
+      }
+      if (!req.user.company_id) {
+        throw { message: 'User belum terikat perusahaan', status: 400 };
+      }
+
+      const data = await svc.updateByCompanyIdWithFiles(req.user.company_id, req.body, logoPath, faviconPath);
       return success(res, data, 'Setting branding company berhasil diperbarui');
     } catch (e) {
       return error(res, e.message, e.status || 500);
@@ -34,8 +46,12 @@ module.exports = {
 
   updateByCompanyId: async (req, res) => {
     try {
-      const logoPath = req.file ? `/uploads/company-branding/${req.file.filename}` : null;
-      const data = await svc.updateByCompanyId(req.params.companyId, req.body, logoPath);
+      const logoFile = req.files?.logo?.[0];
+      const faviconFile = req.files?.favicon?.[0];
+      const logoPath = logoFile ? `/uploads/company-branding/${logoFile.filename}` : null;
+      const faviconPath = faviconFile ? `/uploads/company-branding/${faviconFile.filename}` : null;
+
+      const data = await svc.updateByCompanyIdWithFiles(req.params.companyId, req.body, logoPath, faviconPath);
       return success(res, data, 'Setting branding perusahaan berhasil diperbarui');
     } catch (e) {
       return error(res, e.message, e.status || 500);

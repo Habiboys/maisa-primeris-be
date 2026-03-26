@@ -29,11 +29,27 @@ const updateByCompanyId = async (companyId, payload = {}, logoPath = null) => {
   const next = {
     app_name: payload.app_name ?? setting.app_name,
     logo_url: logoPath || (payload.logo_url ?? setting.logo_url),
+    favicon_url: payload.favicon_url ?? setting.favicon_url,
     primary_color: payload.primary_color ?? setting.primary_color,
     secondary_color: payload.secondary_color ?? setting.secondary_color,
     accent_color: payload.accent_color ?? setting.accent_color,
   };
 
+  await setting.update(next);
+  return setting;
+};
+
+// Update untuk sekaligus menyimpan upload logo + favicon
+const updateByCompanyIdWithFiles = async (companyId, payload = {}, logoPath = null, faviconPath = null) => {
+  const setting = await ensureSettingByCompany(companyId);
+  const next = {
+    app_name: payload.app_name ?? setting.app_name,
+    logo_url: logoPath || (payload.logo_url ?? setting.logo_url),
+    favicon_url: faviconPath || (payload.favicon_url ?? setting.favicon_url),
+    primary_color: payload.primary_color ?? setting.primary_color,
+    secondary_color: payload.secondary_color ?? setting.secondary_color,
+    accent_color: payload.accent_color ?? setting.accent_color,
+  };
   await setting.update(next);
   return setting;
 };
@@ -52,6 +68,9 @@ module.exports = {
   },
 
   updateByCompanyId: async (companyId, payload = {}, logoPath = null) => updateByCompanyId(companyId, payload, logoPath),
+
+  updateByCompanyIdWithFiles: async (companyId, payload = {}, logoPath = null, faviconPath = null) =>
+    updateByCompanyIdWithFiles(companyId, payload, logoPath, faviconPath),
 
   updateForCurrentUser: async (user, payload = {}, logoPath = null) => {
     if (!user.company_id) throw { message: 'User belum terikat perusahaan', status: 400 };

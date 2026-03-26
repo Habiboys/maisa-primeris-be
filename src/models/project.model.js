@@ -25,6 +25,7 @@ module.exports = (sequelize, DataTypes) => {
     status             : { type: DataTypes.ENUM('On Progress', 'Completed', 'Delayed'), defaultValue: 'On Progress' },
     deadline           : DataTypes.STRING(50),
     construction_status: DataTypes.STRING(100),
+    budget_cap        : { type: DataTypes.BIGINT, allowNull: true },
     description        : DataTypes.TEXT,
   }, { sequelize, modelName: 'Project', tableName: 'projects', underscored: true });
   return Project;

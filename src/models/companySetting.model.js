@@ -13,6 +13,7 @@ module.exports = (sequelize, DataTypes) => {
     company_id: { type: DataTypes.UUID, allowNull: false, unique: true },
     app_name: { type: DataTypes.STRING(150), allowNull: false, defaultValue: 'Maisa Primeris App' },
     logo_url: { type: DataTypes.STRING(255), allowNull: true },
+    favicon_url: { type: DataTypes.STRING(255), allowNull: true },
     primary_color: { type: DataTypes.STRING(20), allowNull: false, defaultValue: '#2563eb' },
     secondary_color: { type: DataTypes.STRING(20), allowNull: false, defaultValue: '#14b8a6' },
     accent_color: { type: DataTypes.STRING(20), allowNull: false, defaultValue: '#f59e0b' },

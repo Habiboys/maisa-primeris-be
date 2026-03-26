@@ -5,6 +5,7 @@ module.exports = (sequelize, DataTypes) => {
     static associate(models) {
       HousingUnit.belongsTo(models.Consumer, { foreignKey: 'consumer_id', as: 'consumer' });
       HousingUnit.belongsTo(models.ProjectUnit, { foreignKey: 'project_unit_id', as: 'projectUnit' });
+      HousingUnit.belongsTo(models.Lead, { foreignKey: 'reserved_lead_id', as: 'reservedLead' });
       HousingUnit.hasOne(models.UnitStatus, { foreignKey: 'housing_unit_id', as: 'unitStatus' });
       HousingUnit.hasMany(models.HousingPaymentHistory, { foreignKey: 'housing_unit_id', as: 'payments' });
     }
@@ -28,6 +29,7 @@ module.exports = (sequelize, DataTypes) => {
     harga_jual       : DataTypes.BIGINT,
     daya_listrik     : DataTypes.INTEGER,
     consumer_id      : DataTypes.UUID,
+    reserved_lead_id : DataTypes.UUID,
     status           : { type: DataTypes.ENUM('Tersedia','Proses','Sold'), defaultValue: 'Tersedia' },
     akad_date        : DataTypes.DATEONLY,
     serah_terima_date: DataTypes.DATEONLY,
