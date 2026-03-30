@@ -255,7 +255,7 @@ module.exports = {
 
     await sequelize.transaction(async (t) => {
       // 1. Unbind lead reservations
-      const { HousingUnit, Project, ProjectUnit, WorkLog, WorkLogPhoto, InventoryLog, TimeScheduleItem, QcSubmission, QcSubmissionResult, Akad, Bast, Ppjb, PindahUnit, Pembatalan, HousingPaymentHistory, Transaction, MarketingPerson, Consumer, Lead, QcTemplate, QcTemplateSection, QcTemplateItem, UnitStatus, ConstructionStatus, WorkLocation, AttendanceSetting, Attendance } = sequelize.models;
+      const { HousingUnit, Project, ProjectUnit, WorkLog, WorkLogPhoto, InventoryLog, TimeScheduleItem, QcSubmission, QcSubmissionResult, Akad, Bast, Ppjb, PindahUnit, Pembatalan, HousingPaymentHistory, Transaction, MarketingPerson, Consumer, Lead, QcTemplate, QcTemplateSection, QcTemplateItem, UnitStatus, ConstructionStatus, WorkLocation, AttendanceSetting, Attendance, User, Department, Material } = sequelize.models;
 
       await HousingUnit.update({ reserved_lead_id: null }, { where: { company_id: id }, transaction: t });
 
@@ -340,8 +340,18 @@ module.exports = {
       await MarketingPerson.destroy({ where: { company_id: id }, transaction: t });
       
       // Menghapus data absensi & lokasi kerja (Operational HR)
-      if (Attendance) await Attendance.destroy({ where: { company_id: id }, transaction: t });
+      if (Attendance && User) {
+        const users = await User.findAll({ where: { company_id: id }, attributes: ['id'], transaction: t });
+        const userIds = users.map(u => u.id);
+        if (userIds.length > 0) {
+          await Attendance.destroy({ where: { user_id: userIds }, transaction: t });
+        }
+      }
       if (WorkLocation) await WorkLocation.destroy({ where: { company_id: id }, transaction: t });
+
+      // Menghapus departemen dan material (Data Master Baru)
+      if (Department) await Department.destroy({ where: { company_id: id }, transaction: t });
+      if (Material) await Material.destroy({ where: { company_id: id }, transaction: t });
 
       // Terakhir hapus Project sebagai induk
       await Project.destroy({ where: { company_id: id }, transaction: t });
