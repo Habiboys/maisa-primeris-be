@@ -1,7 +1,7 @@
 'use strict';
 
 const { Op }   = require('sequelize');
-const { Ppjb, Akad, Bast, PindahUnit, Pembatalan, Consumer, HousingUnit, Lead, MarketingPerson } = require('../models');
+const { sequelize, Ppjb, Akad, Bast, PindahUnit, Pembatalan, Consumer, HousingUnit, Lead, MarketingPerson } = require('../models');
 const { withTenantWhere, requireCompanyId, stripCompanyId } = require('../utils/tenant');
 
 /** Resolve consumer_id (dan opsional housing_unit_id) dari lead Deal milik tenant yang sama. */
@@ -47,9 +47,24 @@ const searchWhere = (search, fields) => search
 // ── Generic CRUD helpers ──────────────────────────────────────────
 
 const consumerInclude = { model: Consumer, as: 'consumer', attributes: ['id', 'name', 'nik', 'phone', 'email'] };
-const housingInclude  = { model: HousingUnit, as: 'housingUnit', attributes: ['id', 'unit_code', 'unit_type', 'luas_tanah', 'luas_bangunan', 'project_id'] };
-const housingUnitLamaInclude = { model: HousingUnit, as: 'housingUnitLama', attributes: ['id', 'unit_code', 'unit_type', 'project_id'] };
-const housingUnitBaruInclude = { model: HousingUnit, as: 'housingUnitBaru', attributes: ['id', 'unit_code', 'unit_type', 'project_id'] };
+const housingInclude  = { 
+  model: HousingUnit, 
+  as: 'housingUnit', 
+  attributes: ['id', 'unit_code', 'unit_type', 'luas_tanah', 'luas_bangunan', [sequelize.literal('`housingUnit->projectUnit`.`project_id`'), 'project_id']],
+  include: [{ model: sequelize.models.ProjectUnit, as: 'projectUnit', attributes: [] }]
+};
+const housingUnitLamaInclude = { 
+  model: HousingUnit, 
+  as: 'housingUnitLama', 
+  attributes: ['id', 'unit_code', 'unit_type', [sequelize.literal('`housingUnitLama->projectUnit`.`project_id`'), 'project_id']],
+  include: [{ model: sequelize.models.ProjectUnit, as: 'projectUnit', attributes: [] }]
+};
+const housingUnitBaruInclude = { 
+  model: HousingUnit, 
+  as: 'housingUnitBaru', 
+  attributes: ['id', 'unit_code', 'unit_type', [sequelize.literal('`housingUnitBaru->projectUnit`.`project_id`'), 'project_id']],
+  include: [{ model: sequelize.models.ProjectUnit, as: 'projectUnit', attributes: [] }]
+};
 
 const withTenantIncludes = (includes, actor) => includes.map((inc) => {
   if (inc.as === 'consumer') {

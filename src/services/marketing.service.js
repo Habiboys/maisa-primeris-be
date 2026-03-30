@@ -71,11 +71,25 @@ module.exports = {
     const housingInclude = {
       model: HousingUnit,
       as: 'housingUnit',
-      attributes: ['id', 'unit_code', 'unit_type', 'project_id', 'harga_jual'],
+      attributes: ['id', 'unit_code', 'unit_type', 'harga_jual', [sequelize.literal('`housingUnit->projectUnit`.`project_id`'), 'project_id']],
       required: false,
-      where: project_id ? withTenantWhere({ project_id }, actor) : undefined,
+      include: []
     };
-    if (project_id) housingInclude.required = true;
+    if (project_id) {
+      housingInclude.include.push({
+        model: sequelize.models.ProjectUnit,
+        as: 'projectUnit',
+        attributes: [],
+        where: withTenantWhere({ project_id }, actor),
+      });
+      housingInclude.required = true;
+    } else {
+      housingInclude.include.push({
+        model: sequelize.models.ProjectUnit,
+        as: 'projectUnit',
+        attributes: [],
+      });
+    }
 
     const { count, rows } = await Lead.findAndCountAll({
       where,
@@ -94,7 +108,13 @@ module.exports = {
       where: { id },
       include: [
         { model: MarketingPerson, as: 'marketingPerson', attributes: ['id', 'name'], where: withTenantWhere({}, actor), required: true },
-        { model: HousingUnit, as: 'housingUnit', attributes: ['id', 'unit_code', 'unit_type', 'project_id', 'harga_jual'], required: false },
+        { 
+          model: HousingUnit, 
+          as: 'housingUnit', 
+          attributes: ['id', 'unit_code', 'unit_type', 'harga_jual', [sequelize.literal('`housingUnit->projectUnit`.`project_id`'), 'project_id']], 
+          required: false,
+          include: [{ model: sequelize.models.ProjectUnit, as: 'projectUnit', attributes: [] }]
+        },
       ],
     });
     if (!l) throw { message: 'Lead tidak ditemukan', status: 404 };
@@ -115,12 +135,13 @@ module.exports = {
       if (housingUnitId) {
         const h = await HousingUnit.findOne({
           where: withTenantWhere({ id: housingUnitId }, actor),
+          include: [{ model: sequelize.models.Lead, as: 'reservedLead' }],
           transaction: t,
         });
         if (!h) throw { message: 'Unit tidak ditemukan untuk perusahaan ini', status: 404 };
 
         // Booking/lock: hanya boleh ada 1 reserved_lead_id.
-        if (h.consumer_id) throw { message: 'Unit sudah terkonversi ke piutang/konsumen.', status: 400 };
+        if (h.reservedLead?.consumer_id) throw { message: 'Unit sudah terkonversi ke piutang/konsumen.', status: 400 };
         if (h.status === 'Sold') throw { message: 'Unit sudah Sold.', status: 400 };
         if (h.reserved_lead_id) throw { message: 'Unit sedang dikunci oleh lead lain.', status: 400 };
       }
@@ -184,11 +205,12 @@ module.exports = {
         if (!unitId) return;
         const unit = await HousingUnit.findOne({
           where: withTenantWhere({ id: unitId }, actor),
+          include: [{ model: sequelize.models.Lead, as: 'reservedLead' }],
           transaction: t,
         });
         if (!unit) return;
         if (unit.reserved_lead_id !== l.id) return;
-        if (unit.consumer_id) throw { message: 'Tidak bisa release unit: masih terikat consumer.', status: 400 };
+        if (unit.reservedLead?.consumer_id) throw { message: 'Tidak bisa release unit: masih terikat consumer.', status: 400 };
         await unit.update({ reserved_lead_id: null, status: 'Tersedia' }, { transaction: t });
       };
 
@@ -196,10 +218,11 @@ module.exports = {
         if (!unitId) return;
         const unit = await HousingUnit.findOne({
           where: withTenantWhere({ id: unitId }, actor),
+          include: [{ model: sequelize.models.Lead, as: 'reservedLead' }],
           transaction: t,
         });
         if (!unit) throw { message: 'Unit tidak ditemukan untuk perusahaan ini', status: 404 };
-        if (unit.consumer_id) throw { message: 'Unit sudah terkonversi ke piutang/konsumen.', status: 400 };
+        if (unit.reservedLead?.consumer_id) throw { message: 'Unit sudah terkonversi ke piutang/konsumen.', status: 400 };
         if (unit.status === 'Sold') throw { message: 'Unit sudah Sold.', status: 400 };
 
         if (unit.reserved_lead_id && unit.reserved_lead_id !== l.id) {
@@ -257,10 +280,11 @@ module.exports = {
       if (l.housing_unit_id) {
         const unit = await HousingUnit.findOne({
           where: withTenantWhere({ id: l.housing_unit_id }, actor),
+          include: [{ model: sequelize.models.Lead, as: 'reservedLead' }],
           transaction: t,
         });
         if (unit && unit.reserved_lead_id === l.id) {
-          if (unit.consumer_id) throw { message: 'Tidak bisa release: unit masih terikat consumer.', status: 400 };
+          if (unit.reservedLead?.consumer_id) throw { message: 'Tidak bisa release: unit masih terikat consumer.', status: 400 };
           await unit.update({ reserved_lead_id: null, status: 'Tersedia' }, { transaction: t });
         }
       }

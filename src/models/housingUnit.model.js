@@ -3,7 +3,7 @@ const { Model } = require('sequelize');
 module.exports = (sequelize, DataTypes) => {
   class HousingUnit extends Model {
     static associate(models) {
-      HousingUnit.belongsTo(models.Consumer, { foreignKey: 'consumer_id', as: 'consumer' });
+      HousingUnit.belongsTo(models.Consumer, { foreignKey: 'reserved_lead_id', targetKey: 'lead_id', as: 'consumer' });
       HousingUnit.belongsTo(models.ProjectUnit, { foreignKey: 'project_unit_id', as: 'projectUnit' });
       HousingUnit.belongsTo(models.Lead, { foreignKey: 'reserved_lead_id', as: 'reservedLead' });
       HousingUnit.hasOne(models.UnitStatus, { foreignKey: 'housing_unit_id', as: 'unitStatus' });
@@ -14,7 +14,6 @@ module.exports = (sequelize, DataTypes) => {
     id               : { type: DataTypes.UUID, defaultValue: DataTypes.UUIDV4, primaryKey: true },
     unit_code        : { type: DataTypes.STRING(50), allowNull: false, unique: true },
     company_id       : DataTypes.UUID,
-    project_id       : DataTypes.UUID,
     project_unit_id  : DataTypes.UUID,
     unit_type        : DataTypes.STRING(80),
     id_rumah         : DataTypes.STRING(50),
@@ -28,7 +27,6 @@ module.exports = (sequelize, DataTypes) => {
     harga_per_meter  : DataTypes.BIGINT,
     harga_jual       : DataTypes.BIGINT,
     daya_listrik     : DataTypes.INTEGER,
-    consumer_id      : DataTypes.UUID,
     reserved_lead_id : DataTypes.UUID,
     status           : { type: DataTypes.ENUM('Tersedia','Proses','Sold'), defaultValue: 'Tersedia' },
     akad_date        : DataTypes.DATEONLY,
@@ -38,3 +36,4 @@ module.exports = (sequelize, DataTypes) => {
   }, { sequelize, modelName: 'HousingUnit', tableName: 'housing_units', underscored: true });
   return HousingUnit;
 };
+

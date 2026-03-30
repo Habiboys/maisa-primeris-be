@@ -4,6 +4,7 @@ module.exports = (sequelize, DataTypes) => {
   class Transaction extends Model {
     static associate(models) {
       Transaction.belongsTo(models.User, { foreignKey: 'created_by', as: 'creator' });
+      Transaction.belongsTo(models.HousingUnit, { foreignKey: 'housing_unit_id', as: 'housingUnit' });
     }
   }
   Transaction.init({
@@ -17,6 +18,7 @@ module.exports = (sequelize, DataTypes) => {
     reference_no    : DataTypes.STRING(100),
     attachment      : DataTypes.STRING(255),
     project_id      : DataTypes.UUID,
+    housing_unit_id : DataTypes.UUID,
     company_id      : DataTypes.UUID,
     created_by      : DataTypes.UUID,
   }, { sequelize, modelName: 'Transaction', tableName: 'transactions', underscored: true });

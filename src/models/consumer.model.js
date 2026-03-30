@@ -5,7 +5,7 @@ module.exports = (sequelize, DataTypes) => {
     static associate(models) {
       Consumer.belongsTo(models.Lead, { foreignKey: 'lead_id', as: 'sourceLead' });
       Consumer.hasMany(models.PaymentHistory, { foreignKey: 'consumer_id', as: 'payments' });
-      Consumer.hasMany(models.HousingUnit,    { foreignKey: 'consumer_id', as: 'housingUnits' });
+      Consumer.hasMany(models.HousingUnit, { sourceKey: 'lead_id', foreignKey: 'reserved_lead_id', as: 'housingUnits' });
       Consumer.hasMany(models.Lead,           { foreignKey: 'consumer_id', as: 'convertedLeads' });
     }
   }

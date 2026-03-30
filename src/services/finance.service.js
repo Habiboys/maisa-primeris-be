@@ -181,7 +181,10 @@ module.exports = {
         status: 'Aktif',
       }, { transaction: t });
 
-      await unit.update({ consumer_id: consumer.id }, { transaction: t });
+      // Note: housing_units tidak lagi memiliki consumer_id secara fisik.
+      // Jika butuh menyimpan referensi, sudah ada reserved_lead_id.
+      // Kode sebelumnya: await unit.update({ consumer_id: consumer.id }, { transaction: t });
+      // kita cukup tidak melakukan apa-apa karena reserved_lead_id sudah diset saat booking.
       const [n] = await Lead.update(
         { consumer_id: consumer.id },
         { where: { id: lead_id, consumer_id: null }, transaction: t },
@@ -219,14 +222,14 @@ module.exports = {
 
       // Setelah semua pembayaran dihapus, unit tidak lagi Sold.
       const unit = await HousingUnit.findOne({
-        where: withTenantWhere({ consumer_id: id }, actor),
+        where: withTenantWhere({ reserved_lead_id: c.lead_id }, actor),
         transaction: t,
       });
       const nextUnitStatus = unit?.reserved_lead_id ? 'Proses' : 'Tersedia';
 
       await HousingUnit.update(
-        { consumer_id: null, status: nextUnitStatus },
-        { where: withTenantWhere({ consumer_id: id }, actor), transaction: t },
+        { status: nextUnitStatus },
+        { where: withTenantWhere({ reserved_lead_id: c.lead_id }, actor), transaction: t },
       );
       await c.destroy({ transaction: t });
       await t.commit();
@@ -303,7 +306,7 @@ module.exports = {
 
       // Sinkronisasi unit: Sold hanya jika lunas; kalau belum lunas kembali Proses/Tersedia.
       const housingUnit = await HousingUnit.findOne({
-        where: withTenantWhere({ consumer_id: consumerId }, actor),
+        where: withTenantWhere({ reserved_lead_id: c.lead_id }, actor),
         transaction: t,
       });
       if (housingUnit) {
@@ -357,7 +360,7 @@ module.exports = {
       await c.update({ paid_amount, status: nextConsumerStatus }, { transaction: t });
 
       const housingUnit = await HousingUnit.findOne({
-        where: withTenantWhere({ consumer_id: consumerId }, actor),
+        where: withTenantWhere({ reserved_lead_id: c.lead_id }, actor),
         transaction: t,
       });
       if (housingUnit) {
@@ -401,7 +404,7 @@ module.exports = {
       await c.update({ paid_amount, status: nextConsumerStatus }, { transaction: t });
 
       const housingUnit = await HousingUnit.findOne({
-        where: withTenantWhere({ consumer_id: consumerId }, actor),
+        where: withTenantWhere({ reserved_lead_id: c.lead_id }, actor),
         transaction: t,
       });
       if (housingUnit) {

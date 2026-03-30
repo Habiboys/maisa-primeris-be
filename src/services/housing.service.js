@@ -1,7 +1,7 @@
 'use strict';
 
 const { Op }   = require('sequelize');
-const { HousingUnit, HousingPaymentHistory, Consumer } = require('../models');
+const { sequelize, HousingUnit, HousingPaymentHistory, Consumer, ProjectUnit } = require('../models');
 const { withTenantWhere, requireCompanyId } = require('../utils/tenant');
 
 // Helper untuk normalisasi numeric:
@@ -45,15 +45,24 @@ module.exports = {
     const where = withTenantWhere({}, actor);
     if (status) where.status    = status;
     if (tipe)   where.unit_type = tipe;
-    if (project_id) where.project_id = project_id;
     if (search) where[Op.or]    = [
       { unit_code: { [Op.like]: `%${search}%` } },
       { unit_type: { [Op.like]: `%${search}%` } },
     ];
 
+    const include = [
+      { model: Consumer, as: 'consumer', attributes: ['id', 'name', 'phone'] },
+      { model: ProjectUnit, as: 'projectUnit', attributes: [] }
+    ];
+    if (project_id) {
+      include[1].where = { project_id };
+      include[1].required = true;
+    }
+
     const { count, rows } = await HousingUnit.findAndCountAll({
       where,
-      include: [{ model: Consumer, as: 'consumer', attributes: ['id', 'name', 'phone'] }],
+      attributes: { include: [[sequelize.col('projectUnit.project_id'), 'project_id']] },
+      include,
       order: [['unit_code', 'ASC']],
       ...paginate(page, limit),
     });
@@ -63,7 +72,9 @@ module.exports = {
   getById: async (id, actor) => {
     const u = await HousingUnit.findOne({
       where: withTenantWhere({ id }, actor),
+      attributes: { include: [[sequelize.col('projectUnit.project_id'), 'project_id']] },
       include: [
+        { model: ProjectUnit, as: 'projectUnit', attributes: [] },
         { model: Consumer, as: 'consumer', attributes: ['id', 'name', 'phone', 'email'] },
         { model: HousingPaymentHistory, as: 'payments', order: [['payment_date', 'DESC']] },
       ],
