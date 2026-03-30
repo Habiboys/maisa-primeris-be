@@ -30,6 +30,7 @@ router.use('/me', ensureTenantContext);  // /company-settings/me dan PUT /me but
 
 router.get('/me', ctrl.me);
 router.put('/me', SA_OR_PLATFORM, uploadBrandingFields, ctrl.updateMe);
+router.post('/me/reset', SA_OR_PLATFORM, ctrl.resetMyData);
 
 router.get('/company/:companyId', PLATFORM, ctrl.getByCompanyId);
 router.put('/company/:companyId', PLATFORM, uploadBrandingFields, ctrl.updateByCompanyId);

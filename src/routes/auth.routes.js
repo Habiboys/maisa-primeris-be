@@ -8,7 +8,7 @@ const Joi = require('joi');
 
 const loginSchema = Joi.object({
   email   : Joi.string().email({ tlds: { allow: false } }).required().messages({ 'string.email': 'Format email tidak valid' }),
-  password: Joi.string().min(6).required(),
+  password: Joi.string().required(),
 });
 
 const changePasswordSchema = Joi.object({

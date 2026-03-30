@@ -1,8 +1,36 @@
 'use strict';
 
 const { Op }   = require('sequelize');
-const { Ppjb, Akad, Bast, PindahUnit, Pembatalan, Consumer, HousingUnit } = require('../models');
+const { Ppjb, Akad, Bast, PindahUnit, Pembatalan, Consumer, HousingUnit, Lead, MarketingPerson } = require('../models');
 const { withTenantWhere, requireCompanyId, stripCompanyId } = require('../utils/tenant');
+
+/** Resolve consumer_id (dan opsional housing_unit_id) dari lead Deal milik tenant yang sama. */
+const resolveLeadForLegal = async (payload, actor, modelName) => {
+  if (!payload.lead_id) return { ...payload };
+  const lead = await Lead.findOne({
+    where: { id: payload.lead_id },
+    include: [{
+      model: MarketingPerson,
+      as: 'marketingPerson',
+      attributes: ['id'],
+      where: withTenantWhere({}, actor),
+      required: true,
+    }],
+  });
+  if (!lead) throw { message: 'Lead tidak ditemukan atau bukan untuk perusahaan ini', status: 404 };
+  if (lead.status !== 'Deal') throw { message: 'Hanya lead berstatus Deal yang bisa dipakai untuk dokumen legal', status: 400 };
+  if (!lead.consumer_id) throw { message: 'Lead belum memiliki data konsumen. Selesaikan konversi piutang di Finance terlebih dahulu.', status: 400 };
+  const c = await Consumer.findOne({ where: withTenantWhere({ id: lead.consumer_id }, actor) });
+  if (!c) throw { message: 'Konsumen tidak valid untuk perusahaan ini', status: 400 };
+
+  const { lead_id: _lid, ...rest } = payload;
+  const out = { ...rest, consumer_id: lead.consumer_id };
+  const isPindah = modelName === 'PindahUnit';
+  if (!isPindah && lead.housing_unit_id && !out.housing_unit_id) {
+    out.housing_unit_id = lead.housing_unit_id;
+  }
+  return out;
+};
 
 const paginate = (page = 1, limit = 20) => {
   const lim = Math.min(parseInt(limit, 10) || 20, 100);
@@ -65,26 +93,28 @@ const makeCRUD = (Model, notFoundMsg, searchFields = [], includes = []) => ({
     return r;
   },
   create:  async (payload, actor) => {
-    if (payload.consumer_id) {
-      const c = await Consumer.findOne({ where: withTenantWhere({ id: payload.consumer_id }, actor) });
+    const p = await resolveLeadForLegal(payload, actor, Model.name);
+    if (p.consumer_id) {
+      const c = await Consumer.findOne({ where: withTenantWhere({ id: p.consumer_id }, actor) });
       if (!c) throw { message: 'Konsumen lintas perusahaan tidak diizinkan', status: 400 };
     }
-    await validateHousingUnitIds(payload, actor);
+    await validateHousingUnitIds(p, actor);
     const company_id = requireCompanyId(actor);
-    const safePayload = { ...stripCompanyId(payload), company_id };
+    const safePayload = { ...stripCompanyId(p), company_id };
     return Model.create(safePayload);
   },
   update:  async (id, payload, actor) => {
     const r = await Model.findOne({ where: withTenantWhere({ id }, actor), include: withTenantIncludes(includes, actor) });
     if (!r) throw { message: notFoundMsg, status: 404 };
 
-    if (payload.consumer_id) {
-      const c = await Consumer.findOne({ where: withTenantWhere({ id: payload.consumer_id }, actor) });
+    const p = await resolveLeadForLegal(payload, actor, Model.name);
+    if (p.consumer_id) {
+      const c = await Consumer.findOne({ where: withTenantWhere({ id: p.consumer_id }, actor) });
       if (!c) throw { message: 'Konsumen lintas perusahaan tidak diizinkan', status: 400 };
     }
-    await validateHousingUnitIds(payload, actor);
+    await validateHousingUnitIds(p, actor);
 
-    await r.update(stripCompanyId(payload));
+    await r.update(stripCompanyId(p));
     return r;
   },
   remove:  async (id, actor) => {

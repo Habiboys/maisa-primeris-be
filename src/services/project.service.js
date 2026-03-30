@@ -7,6 +7,7 @@ const {
   Project,
   ProjectUnit,
   ConstructionStatus,
+  QcTemplate,
   TimeScheduleItem,
   InventoryLog,
   WorkLog,
@@ -58,15 +59,90 @@ const getScopedProject = async (projectId, actor) => {
   return p;
 };
 
+const MAX_UNITS_BULK = 500;
+
 /**
- * Bulk-create N units for a project + auto-create corresponding housing_units.
- * Unit numbering: {prefix}-01, {prefix}-02, …
- * Skips units whose `no` already exists within the project.
+ * Multi-blok: [{ prefix: 'A', start: 1, end: 10 }, { prefix: 'B', start: 1, end: 10 }, …]
+ * → A-01..A-10, B-01..B-10 (padding nomor diseragamkan lebar global).
  */
-const bulkCreateUnits = async (projectId, { count, prefix, tipe }, companyId) => {
+const normalizeAndExpandUnitBlocks = (rawBlocks) => {
+  const blocks = rawBlocks
+    .map((b) => ({
+      prefix: String(b.prefix ?? "").trim(),
+      start: parseInt(b.start, 10),
+      end: parseInt(b.end, 10),
+    }))
+    .filter((b) => b.prefix);
+
+  if (!blocks.length) {
+    throw { message: "Minimal satu blok dengan prefix yang valid", status: 400 };
+  }
+
+  for (const b of blocks) {
+    if (Number.isNaN(b.start) || Number.isNaN(b.end)) {
+      throw { message: `Nomor awal/akhir tidak valid untuk blok "${b.prefix}"`, status: 400 };
+    }
+    if (b.start < 1 || b.end < b.start) {
+      throw {
+        message: `Rentang tidak valid untuk blok "${b.prefix}" (awal ≤ akhir, minimal 1)`,
+        status: 400,
+      };
+    }
+  }
+
+  let globalMax = 0;
+  for (const b of blocks) {
+    for (let i = b.start; i <= b.end; i += 1) globalMax = Math.max(globalMax, i);
+  }
+  const width = Math.max(2, String(globalMax).length);
+
+  const nos = [];
+  const seen = new Set();
+  for (const b of blocks) {
+    for (let i = b.start; i <= b.end; i += 1) {
+      const no = `${b.prefix}-${String(i).padStart(width, "0")}`;
+      if (seen.has(no)) {
+        throw { message: `Nomor unit duplikat: ${no}`, status: 400 };
+      }
+      seen.add(no);
+      nos.push(no);
+    }
+  }
+
+  if (nos.length > MAX_UNITS_BULK) {
+    throw { message: `Maksimal ${MAX_UNITS_BULK} unit per operasi`, status: 400 };
+  }
+  return nos;
+};
+
+/** Mode lama: satu prefix + jumlah N → PREFIX-01 .. (lebar nomor mengikuti N) */
+const expandLegacyPrefixCount = (prefix, count) => {
+  const p = String(prefix ?? "").trim();
+  if (!p) throw { message: "Prefix unit wajib diisi", status: 400 };
+  const n = parseInt(count, 10) || 0;
+  if (n < 1) return [];
+  const width = Math.max(2, String(n).length);
+  const nos = [];
+  const seen = new Set();
+  for (let i = 1; i <= n; i += 1) {
+    const no = `${p}-${String(i).padStart(width, "0")}`;
+    if (seen.has(no)) throw { message: `Nomor unit duplikat: ${no}`, status: 400 };
+    seen.add(no);
+    nos.push(no);
+  }
+  if (nos.length > MAX_UNITS_BULK) {
+    throw { message: `Maksimal ${MAX_UNITS_BULK} unit per operasi`, status: 400 };
+  }
+  return nos;
+};
+
+/**
+ * Bulk-create banyak unit dari daftar `no` + auto housing_units.
+ * Lewati `no` yang sudah ada di project (idempotent).
+ */
+const bulkCreateUnitsFromNos = async (projectId, nos, tipe, companyId) => {
   const created = [];
-  for (let i = 1; i <= count; i++) {
-    const no = `${prefix}-${String(i).padStart(2, "0")}`;
+  for (const no of nos) {
     const existing = await ProjectUnit.findOne({ where: { project_id: projectId, no } });
     if (existing) continue;
 
@@ -80,27 +156,19 @@ const bulkCreateUnits = async (projectId, { count, prefix, tipe }, companyId) =>
       qc_readiness: 0,
     });
 
-    // Auto-create / relink housing unit (one-to-one ke project_unit)
-    // Jangan match pakai `unit_code` saja karena bisa "nyangkut" dari data seed/other project.
     let existingHousing = await HousingUnit.findOne({ where: { project_unit_id: unit.id, company_id: companyId } });
     if (!existingHousing) {
-      // Fallback untuk data lama yang belum punya project_unit_id (atau relasinya belum benar)
       existingHousing = await HousingUnit.findOne({ where: { unit_code: no, company_id: companyId } });
     }
 
     const wipePayload = {
-      // relasi
       project_id: projectId,
       project_unit_id: unit.id,
-
-      // basic
       unit_code: no,
       unit_type: tipe || null,
       status: "Tersedia",
       notes: "",
       consumer_id: null,
-
-      // wipe detail kavling agar project baru tidak ikut membawa isi dari project lain
       luas_tanah: null,
       luas_bangunan: null,
       harga_per_meter: null,
@@ -181,17 +249,38 @@ module.exports = {
 
   createProject: async (payload, actor) => {
     const companyId = requireCompanyId(actor);
-    const project = await Project.create({ ...payload, company_id: companyId });
-    // Auto-create units jika units_count > 0 dan unit_prefix disediakan
-    const unitsCount = parseInt(payload.units_count, 10) || 0;
-    const unitPrefix = payload.unit_prefix;
-    if (unitsCount > 0 && unitPrefix) {
-      await bulkCreateUnits(project.id, {
-        count: unitsCount,
-        prefix: unitPrefix,
-        tipe: payload.unit_tipe || null,
-      }, companyId);
+    const {
+      unit_blocks: unitBlocks,
+      unit_prefix: unitPrefix,
+      unit_tipe: unitTipe,
+      units_count: unitsCountRaw,
+      ...projectFields
+    } = payload;
+
+    const project = await Project.create({
+      ...projectFields,
+      company_id: companyId,
+      units_count: 0,
+    });
+
+    let nos = [];
+    if (Array.isArray(unitBlocks) && unitBlocks.length > 0) {
+      nos = normalizeAndExpandUnitBlocks(unitBlocks);
+    } else {
+      const unitsCount = parseInt(unitsCountRaw, 10) || 0;
+      const prefix = unitPrefix && String(unitPrefix).trim();
+      if (unitsCount > 0 && !prefix) {
+        throw { message: "Prefix unit wajib jika jumlah unit > 0 (mode satu blok), atau isi unit_blocks", status: 400 };
+      }
+      if (unitsCount > 0 && prefix) {
+        nos = expandLegacyPrefixCount(prefix, unitsCount);
+      }
     }
+
+    if (nos.length > 0) {
+      await bulkCreateUnitsFromNos(project.id, nos, unitTipe || null, companyId);
+    }
+
     return project;
   },
 
@@ -199,7 +288,7 @@ module.exports = {
     const p = await Project.findOne({ where: withTenantWhere({ id }, actor) });
     if (!p) throw { message: "Proyek tidak ditemukan", status: 404 };
     // units_count tidak boleh diubah via update — selalu dihitung dari jumlah unit aktual
-    const { units_count, unit_prefix, unit_tipe, ...safePayload } = payload;
+    const { units_count, unit_prefix, unit_tipe, unit_blocks, ...safePayload } = payload;
     await p.update(safePayload);
     return p;
   },
@@ -213,14 +302,15 @@ module.exports = {
   bulkCreateUnitsForProject: async (projectId, payload, actor) => {
     const project = await getScopedProject(projectId, actor);
     const companyId = project.company_id;
-    const count = parseInt(payload.count, 10) || 0;
-    if (count <= 0 || !payload.prefix) throw { message: "count dan prefix wajib diisi", status: 400 };
-    const created = await bulkCreateUnits(projectId, {
-      count,
-      prefix: payload.prefix,
-      tipe: payload.tipe || null,
-    }, companyId);
-    return created;
+    let nos = [];
+    if (Array.isArray(payload.blocks) && payload.blocks.length > 0) {
+      nos = normalizeAndExpandUnitBlocks(payload.blocks);
+    } else {
+      const count = parseInt(payload.count, 10) || 0;
+      if (count <= 0 || !payload.prefix) throw { message: "count dan prefix wajib diisi (mode satu blok)", status: 400 };
+      nos = expandLegacyPrefixCount(String(payload.prefix).trim(), count);
+    }
+    return bulkCreateUnitsFromNos(projectId, nos, payload.tipe || null, companyId);
   },
 
   // ── Project Units ──────────────────────────────────────────
@@ -248,7 +338,24 @@ module.exports = {
     await getScopedProject(projectId, actor);
     const u = await ProjectUnit.findOne({ where: { project_id: projectId, no: unitNo } });
     if (!u) throw { message: "Unit tidak ditemukan", status: 404 };
-    await u.update(payload);
+
+    const companyId = requireCompanyId(actor);
+    const updatePayload = { ...payload };
+
+    if (Object.prototype.hasOwnProperty.call(payload, "qc_template_id")) {
+      const tid = payload.qc_template_id;
+      if (tid === "" || tid === null || typeof tid === "undefined") {
+        updatePayload.qc_template_id = null;
+      } else {
+        const tplWhere = companyId
+          ? { id: tid, company_id: companyId }
+          : { id: tid };
+        const tpl = await QcTemplate.findOne({ where: tplWhere });
+        if (!tpl) updatePayload.qc_template_id = null;
+      }
+    }
+
+    await u.update(updatePayload);
     await recalculateProjectProgress(projectId);
     return u;
   },

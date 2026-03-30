@@ -32,7 +32,6 @@ module.exports = {
         id: companyId,
         name: 'Maisa Primeris',
         code: COMPANY_CODE,
-        domain: null,
         is_active: true,
         subscription_plan: 'enterprise',
         billing_cycle: 'yearly',

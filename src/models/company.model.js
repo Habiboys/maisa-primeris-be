@@ -6,6 +6,8 @@ module.exports = (sequelize, DataTypes) => {
     static associate(models) {
       Company.hasMany(models.User, { foreignKey: 'company_id', as: 'users' });
       Company.hasOne(models.CompanySetting, { foreignKey: 'company_id', as: 'settings' });
+      Company.hasMany(models.Department, { foreignKey: 'company_id', as: 'departments', onDelete: 'CASCADE' });
+      Company.hasMany(models.Material, { foreignKey: 'company_id', as: 'materials', onDelete: 'CASCADE' });
     }
   }
 
@@ -13,7 +15,6 @@ module.exports = (sequelize, DataTypes) => {
     id: { type: DataTypes.UUID, defaultValue: DataTypes.UUIDV4, primaryKey: true },
     name: { type: DataTypes.STRING(150), allowNull: false },
     code: { type: DataTypes.STRING(60), allowNull: false, unique: true },
-    domain: { type: DataTypes.STRING(150), allowNull: true, unique: true },
     is_active: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: true },
     subscription_plan: { type: DataTypes.STRING(50), allowNull: false, defaultValue: 'basic' },
     billing_cycle: { type: DataTypes.ENUM('monthly', 'yearly'), allowNull: false, defaultValue: 'monthly' },

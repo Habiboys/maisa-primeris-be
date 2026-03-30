@@ -12,6 +12,7 @@ router.get('/', ctrl.list);
 router.post('/', ctrl.create);
 router.get('/:id', ctrl.getById);
 router.put('/:id', ctrl.update);
+router.post('/:id/reset', ctrl.resetData);
 router.delete('/:id', ctrl.remove);
 
 module.exports = router;

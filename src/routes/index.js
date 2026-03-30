@@ -6,6 +6,8 @@ router.use('/auth',       require('./auth.routes'));
 router.use('/users',      require('./user.routes'));
 router.use('/companies',  require('./company.routes'));
 router.use('/company-settings', require('./companySetting.routes'));
+router.use('/departments', require('./department.routes'));
+router.use('/materials',   require('./material.routes'));
 router.use('/',           require('./finance.routes'));      // /transactions + /consumers
 router.use('/',           require('./marketing.routes'));    // /leads + /marketing-persons + /unit-statuses
 router.use('/',           require('./housing.routes'));      // /housing

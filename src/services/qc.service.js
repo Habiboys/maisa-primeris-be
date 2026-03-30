@@ -88,8 +88,76 @@ const svc = {
   updateTemplate: async (id, payload, actor) => {
     const tpl = await QcTemplate.findOne({ where: withTenantWhere({ id }, actor) });
     if (!tpl) throw { message: "Template QC tidak ditemukan", status: 404 };
-    await tpl.update(payload);
-    return tpl;
+
+    return sequelize.transaction(async (t) => {
+      // 1. Update info template dasar
+      const safeUpdate = {};
+      if (payload.name !== undefined) safeUpdate.name = payload.name;
+      if (payload.description !== undefined) safeUpdate.description = payload.description;
+      if (payload.is_active !== undefined) safeUpdate.is_active = payload.is_active;
+      await tpl.update(safeUpdate, { transaction: t });
+
+      // 2. Sinkronisasi sections dan items jika dikirim dari frontend
+      if (Array.isArray(payload.sections)) {
+        const isUUID = (str) => typeof str === 'string' && /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(str);
+        
+        const existingSections = await QcTemplateSection.findAll({ where: { template_id: id }, transaction: t });
+        const existingSectionIds = existingSections.map((s) => s.id);
+        const payloadSectionIds = payload.sections.map((s) => s.id).filter(isUUID);
+        
+        const sectionsToDelete = existingSectionIds.filter((sid) => !payloadSectionIds.includes(sid));
+        if (sectionsToDelete.length > 0) {
+          await QcTemplateSection.destroy({ where: { id: sectionsToDelete }, transaction: t });
+        }
+
+        for (let i = 0; i < payload.sections.length; i++) {
+          const sec = payload.sections[i];
+          let sectionId = sec.id;
+          
+          if (!isUUID(sec.id)) {
+            const newSec = await QcTemplateSection.create({
+              template_id: id,
+              name: sec.name,
+              order_index: sec.order_index ?? i,
+            }, { transaction: t });
+            sectionId = newSec.id;
+          } else {
+            await QcTemplateSection.update({
+              name: sec.name,
+              order_index: sec.order_index ?? i,
+            }, { where: { id: sectionId }, transaction: t });
+          }
+
+          if (Array.isArray(sec.items)) {
+            const existingItems = await QcTemplateItem.findAll({ where: { section_id: sectionId }, transaction: t });
+            const existingItemIds = existingItems.map((it) => it.id);
+            const payloadItemIds = sec.items.map((it) => it.id).filter(isUUID);
+
+            const itemsToDelete = existingItemIds.filter((iid) => !payloadItemIds.includes(iid));
+            if (itemsToDelete.length > 0) {
+              await QcTemplateItem.destroy({ where: { id: itemsToDelete }, transaction: t });
+            }
+
+            for (let j = 0; j < sec.items.length; j++) {
+              const it = sec.items[j];
+              if (!isUUID(it.id)) {
+                await QcTemplateItem.create({
+                  section_id: sectionId,
+                  description: it.description,
+                  order_index: it.order_index ?? j,
+                }, { transaction: t });
+              } else {
+                await QcTemplateItem.update({
+                  description: it.description,
+                  order_index: it.order_index ?? j,
+                }, { where: { id: it.id }, transaction: t });
+              }
+            }
+          }
+        }
+      }
+      return tpl;
+    });
   },
 
   removeTemplate: async (id, actor) => {

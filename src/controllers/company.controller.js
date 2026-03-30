@@ -48,4 +48,13 @@ module.exports = {
       return error(res, e.message, e.status || 500);
     }
   },
+
+  resetData: async (req, res) => {
+    try {
+      const data = await svc.resetData(req.params.id);
+      return success(res, data, 'Seluruh data operasional perusahaan berhasil direset');
+    } catch (e) {
+      return error(res, e.message, e.status || 500);
+    }
+  },
 };

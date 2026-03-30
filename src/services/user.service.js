@@ -5,6 +5,17 @@ const { Op }       = require('sequelize');
 const { User, ActivityLog, Company } = require('../models');
 
 const SALT_ROUNDS = 10;
+const MIN_PASSWORD_LENGTH = 6;
+
+const assertPasswordLength = (password, fieldLabel = 'Password') => {
+  if (password == null || password === '') return;
+  if (String(password).length < MIN_PASSWORD_LENGTH) {
+    throw {
+      message: `${fieldLabel} minimal ${MIN_PASSWORD_LENGTH} karakter`,
+      status: 400,
+    };
+  }
+};
 
 // ── Helper: pagination ────────────────────────────────────────────
 const paginate = (page = 1, limit = 20) => ({
@@ -71,6 +82,8 @@ module.exports = {
 
   // ── POST /users ───────────────────────────────────────────────
   create: async ({ name, email, password, role, phone, work_location_id, company_id }, actor) => {
+    if (!password) throw { message: 'Password wajib diisi', status: 400 };
+    assertPasswordLength(password, 'Password');
     const exists = await User.findOne({ where: { email } });
     if (exists) throw { message: 'Email sudah terdaftar', status: 409 };
 
@@ -134,7 +147,10 @@ module.exports = {
       work_location_id,
       company_id: assignedCompanyId,
     };
-    if (password) updates.password = await bcrypt.hash(password, SALT_ROUNDS);
+    if (password) {
+      assertPasswordLength(password, 'Password');
+      updates.password = await bcrypt.hash(password, SALT_ROUNDS);
+    }
 
     await user.update(updates);
     const { password: _, ...safe } = user.toJSON();

@@ -5,7 +5,7 @@ const ctrl   = require('../controllers/marketing.controller');
 const { authenticate, authorize } = require('../middlewares/auth.middleware');
 const { ensureTenantContext } = require('../middlewares/tenant.middleware');
 
-const SA = authorize('Super Admin');
+const SA = authorize('Super Admin', 'Finance');
 
 router.use(authenticate, ensureTenantContext);
 

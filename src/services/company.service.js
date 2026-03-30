@@ -170,6 +170,24 @@ module.exports = {
         }));
         await ConstructionStatus.bulkCreate(constructionPayload, { transaction });
 
+        // Starter Data Divisi / Department
+        const departmentsPayload = [
+            { company_id: company.id, name: 'Project & Construction', description: 'Divisi Pembangunan' },
+            { company_id: company.id, name: 'Marketing & Sales', description: 'Divisi Pemasaran' },
+            { company_id: company.id, name: 'Finance & Accounting', description: 'Divisi Keuangan' }
+        ];
+        await sequelize.models.Department.bulkCreate(departmentsPayload, { transaction });
+
+        // Starter Data Material
+        const materialsPayload = [
+            { company_id: company.id, name: 'Semen Portland', unit: 'Sak', notes: '' },
+            { company_id: company.id, name: 'Besi Beton 10mm', unit: 'Batang', notes: '' },
+            { company_id: company.id, name: 'Cat Tembok Putih', unit: 'Pail', notes: '' },
+            { company_id: company.id, name: 'Bata Ringan', unit: 'M3', notes: '' },
+            { company_id: company.id, name: 'Pasir Cor', unit: 'Pick Up', notes: '' }
+        ];
+        await sequelize.models.Material.bulkCreate(materialsPayload, { transaction });
+
         // Tidak lagi auto-create admin tenant. Admin tenant dibuat manual via UI.
         return {
           companyId: company.id,
@@ -247,5 +265,123 @@ module.exports = {
     if (!company) throw { message: 'Perusahaan tidak ditemukan', status: 404 };
 
     await company.destroy();
+  },
+
+  resetData: async (id) => {
+    const company = await Company.findByPk(id);
+    if (!company) throw { message: 'Perusahaan tidak ditemukan', status: 404 };
+
+    await sequelize.transaction(async (t) => {
+      // 1. Unbind lead reservations
+      const { HousingUnit, Project, ProjectUnit, WorkLog, WorkLogPhoto, InventoryLog, TimeScheduleItem, QcSubmission, QcSubmissionResult, Akad, Bast, Ppjb, PindahUnit, Pembatalan, HousingPaymentHistory, Transaction, MarketingPerson, Consumer, Lead, QcTemplate, QcTemplateSection, QcTemplateItem, UnitStatus, ConstructionStatus, WorkLocation, AttendanceSetting, Attendance, User, LeaveRequest, UserLocationAssignment } = sequelize.models;
+
+      await HousingUnit.update({ reserved_lead_id: null }, { where: { company_id: id }, transaction: t });
+
+      const projects = await Project.findAll({ where: { company_id: id }, transaction: t });
+      const projectIds = projects.map(p => p.id);
+
+      let projectUnitIds = [];
+      if (projectIds.length > 0) {
+        const units = await ProjectUnit.findAll({ where: { project_id: projectIds }, transaction: t });
+        projectUnitIds = units.map(u => u.id);
+
+        const workLogs = await WorkLog.findAll({ where: { project_id: projectIds }, transaction: t });
+        const workLogIds = workLogs.map(w => w.id);
+        if (workLogIds.length > 0) {
+          await WorkLogPhoto.destroy({ where: { work_log_id: workLogIds }, transaction: t });
+        }
+        await WorkLog.destroy({ where: { project_id: projectIds }, transaction: t });
+        await InventoryLog.destroy({ where: { project_id: projectIds }, transaction: t });
+        
+        await TimeScheduleItem.destroy({ where: { ref_id: projectIds, ref_type: 'project' }, transaction: t });
+        if (projectUnitIds.length > 0) {
+          await TimeScheduleItem.destroy({ where: { ref_id: projectUnitIds, ref_type: 'project_unit' }, transaction: t });
+        }
+
+        const qcSubmissions = await QcSubmission.findAll({ where: { project_id: projectIds }, transaction: t });
+        const qcSubmissionIds = qcSubmissions.map(q => q.id);
+        if (qcSubmissionIds.length > 0) {
+          await QcSubmissionResult.destroy({ where: { submission_id: qcSubmissionIds }, transaction: t });
+          await QcSubmission.destroy({ where: { id: qcSubmissionIds }, transaction: t });
+        }
+      }
+
+      await Akad.destroy({ where: { company_id: id }, transaction: t });
+      await Bast.destroy({ where: { company_id: id }, transaction: t });
+      await Ppjb.destroy({ where: { company_id: id }, transaction: t });
+      await PindahUnit.destroy({ where: { company_id: id }, transaction: t });
+      await Pembatalan.destroy({ where: { company_id: id }, transaction: t });
+
+      const housingUnits = await HousingUnit.findAll({ where: { company_id: id }, transaction: t });
+      const housingUnitIds = housingUnits.map(h => h.id);
+      if (housingUnitIds.length > 0) {
+        await HousingPaymentHistory.destroy({ where: { housing_unit_id: housingUnitIds }, transaction: t });
+      }
+      await Transaction.destroy({ where: { company_id: id }, transaction: t });
+
+      const marketings = await MarketingPerson.findAll({ where: { company_id: id }, transaction: t });
+      const marketingIds = marketings.map(m => m.id);
+      const consumers = await Consumer.findAll({ where: { company_id: id }, transaction: t });
+      const consumerIds = consumers.map(c => c.id);
+
+      const leadOrConditions = [];
+      if (marketingIds.length > 0) leadOrConditions.push({ marketing_id: marketingIds });
+      if (consumerIds.length > 0) leadOrConditions.push({ consumer_id: consumerIds });
+      if (housingUnitIds.length > 0) leadOrConditions.push({ housing_unit_id: housingUnitIds });
+      if (projectIds.length > 0) leadOrConditions.push({ project_id: projectIds });
+      
+      if (leadOrConditions.length > 0) {
+         await Lead.destroy({ where: { [Op.or]: leadOrConditions }, transaction: t });
+      }
+
+      await Consumer.destroy({ where: { company_id: id }, transaction: t });
+
+      const qcTemplates = await QcTemplate.findAll({ where: { company_id: id }, transaction: t });
+      const qcTemplateIds = qcTemplates.map(q => q.id);
+      if (qcTemplateIds.length > 0) {
+        const sections = await QcTemplateSection.findAll({ where: { template_id: qcTemplateIds }, transaction: t });
+        const sectionIds = sections.map(s => s.id);
+        if (sectionIds.length > 0) {
+          await QcTemplateItem.destroy({ where: { section_id: sectionIds }, transaction: t });
+          await QcTemplateSection.destroy({ where: { id: sectionIds }, transaction: t });
+        }
+        await QcTemplate.destroy({ where: { id: qcTemplateIds }, transaction: t });
+      }
+
+      await HousingUnit.destroy({ where: { company_id: id }, transaction: t });
+      if (projectIds.length > 0) {
+        await ProjectUnit.destroy({ where: { project_id: projectIds }, transaction: t });
+      }
+
+      await UnitStatus.destroy({ where: { company_id: id }, transaction: t });
+      await ConstructionStatus.destroy({ where: { company_id: id }, transaction: t });
+      await MarketingPerson.destroy({ where: { company_id: id }, transaction: t });
+      
+      // Menghapus data absensi & lokasi kerja (Operational HR)
+      if (WorkLocation) await WorkLocation.destroy({ where: { company_id: id }, transaction: t });
+
+      if (User) {
+        const companyUsers = await User.findAll({ where: { company_id: id }, attributes: ['id'], transaction: t });
+        const userIds = companyUsers.map(u => u.id);
+        if (userIds.length > 0) {
+          if (Attendance) await Attendance.destroy({ where: { user_id: userIds }, transaction: t });
+          if (LeaveRequest) await LeaveRequest.destroy({ where: { user_id: userIds }, transaction: t });
+          if (UserLocationAssignment) await UserLocationAssignment.destroy({ where: { user_id: userIds }, transaction: t });
+        }
+      }
+
+      // Terakhir hapus Project sebagai induk
+      await Project.destroy({ where: { company_id: id }, transaction: t });
+
+      await UnitStatus.bulkCreate(buildDefaultUnitStatuses(id), { transaction: t });
+
+      await AttendanceSetting.update({
+        work_start_time: '08:00:00',
+        work_end_time: '17:00:00',
+        late_grace_minutes: 0,
+      }, { where: { company_id: id }, transaction: t });
+    });
+
+    return getCompanyById(id);
   },
 };

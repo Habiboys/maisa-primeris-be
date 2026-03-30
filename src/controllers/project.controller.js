@@ -5,6 +5,12 @@ const svc = require("../services/project.service");
 const { success, created, error } = require("../utils/response");
 
 // Joi schemas
+const unitBlockSchema = Joi.object({
+  prefix: Joi.string().max(50).required(),
+  start: Joi.number().integer().min(1).required(),
+  end: Joi.number().integer().min(Joi.ref("start")).required(),
+});
+
 const projectSchema = Joi.object({
   name: Joi.string().max(150).required(),
   type: Joi.string().valid("cluster", "standalone").required(),
@@ -12,6 +18,7 @@ const projectSchema = Joi.object({
   units_count: Joi.number().integer().min(0),
   unit_prefix: Joi.string().max(50).allow(null, ""),
   unit_tipe: Joi.string().max(50).allow(null, ""),
+  unit_blocks: Joi.array().items(unitBlockSchema).max(40).optional(),
   status: Joi.string().valid("On Progress", "Completed", "Delayed"),
   deadline: Joi.string().max(50).allow(null, ""),
   budget_cap: Joi.number().integer().min(0).allow(null, ""),
@@ -155,11 +162,17 @@ module.exports = {
   },
 
   bulkCreateUnits: async (req, res) => {
-    const schema = Joi.object({
-      count: Joi.number().integer().min(1).max(200).required(),
-      prefix: Joi.string().max(50).required(),
-      tipe: Joi.string().max(50).allow(null, ""),
-    });
+    const schema = Joi.alternatives().try(
+      Joi.object({
+        tipe: Joi.string().max(50).allow(null, ""),
+        blocks: Joi.array().items(unitBlockSchema).min(1).max(40).required(),
+      }),
+      Joi.object({
+        tipe: Joi.string().max(50).allow(null, ""),
+        count: Joi.number().integer().min(1).max(500).required(),
+        prefix: Joi.string().max(50).required(),
+      }),
+    );
     const { error: vErr } = schema.validate(req.body, { abortEarly: false, stripUnknown: true });
     if (vErr) return error(res, "Validasi gagal", 400, vErr.details.map((d) => d.message));
     try {

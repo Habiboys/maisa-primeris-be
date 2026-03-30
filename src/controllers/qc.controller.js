@@ -11,14 +11,16 @@ const templateSchema = Joi.object({
   sections: Joi.array()
     .items(
       Joi.object({
+        id: Joi.string().optional(),
         name: Joi.string().required(),
         order_index: Joi.number().integer().min(0),
         items: Joi.array().items(
           Joi.object({
+            id: Joi.string().optional(),
             description: Joi.string().required(),
             order_index: Joi.number().integer().min(0),
           })
-        ),
+        ).optional(),
       })
     )
     .optional(),

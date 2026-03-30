@@ -8,7 +8,7 @@ const ctrl = require('../controllers/housing.controller');
 const { authenticate, authorize } = require('../middlewares/auth.middleware');
 const { ensureTenantContext } = require('../middlewares/tenant.middleware');
 
-const SA = authorize('Super Admin');
+const SA = authorize('Super Admin', 'Finance');
 const SA_FN = authorize('Super Admin', 'Finance');
 
 const uploadDir = path.join(__dirname, '../../uploads/housing-units');

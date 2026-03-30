@@ -1,6 +1,7 @@
 'use strict';
 
 const svc = require('../services/companySetting.service');
+const companySvc = require('../services/company.service');
 const { success, error } = require('../utils/response');
 
 module.exports = {
@@ -53,6 +54,18 @@ module.exports = {
 
       const data = await svc.updateByCompanyIdWithFiles(req.params.companyId, req.body, logoPath, faviconPath);
       return success(res, data, 'Setting branding perusahaan berhasil diperbarui');
+    } catch (e) {
+      return error(res, e.message, e.status || 500);
+    }
+  },
+
+  resetMyData: async (req, res) => {
+    try {
+      if (!req.user.company_id) {
+        throw { message: 'User tidak terikat pada perusahaan mana pun', status: 400 };
+      }
+      const data = await companySvc.resetData(req.user.company_id);
+      return success(res, data, 'Seluruh data operasional perusahaan berhasil direset');
     } catch (e) {
       return error(res, e.message, e.status || 500);
     }

@@ -24,7 +24,7 @@ module.exports = {
       include: [{
         model: Company,
         as: 'company',
-        attributes: ['id', 'name', 'code', 'domain', 'is_active'],
+        attributes: ['id', 'name', 'code', 'is_active'],
         include: [{ model: CompanySetting, as: 'settings' }],
       }],
     });
@@ -78,7 +78,7 @@ module.exports = {
       include: [{
         model: Company,
         as: 'company',
-        attributes: ['id', 'name', 'code', 'domain', 'is_active'],
+        attributes: ['id', 'name', 'code', 'is_active'],
         include: [{ model: CompanySetting, as: 'settings' }],
       }],
     });
