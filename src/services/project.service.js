@@ -498,4 +498,37 @@ module.exports = {
     await log.update(payload);
     return log;
   },
+
+  deleteWorkLogPhoto: async (projectId, logId, photoId, actor) => {
+    await getScopedProject(projectId, actor);
+    const log = await WorkLog.findOne({ where: { id: logId, project_id: projectId } });
+    if (!log) throw { message: "Work log tidak ditemukan", status: 404 };
+    const photo = await WorkLogPhoto.findOne({ where: { id: photoId, work_log_id: logId } });
+    if (!photo) throw { message: "Foto tidak ditemukan", status: 404 };
+
+    // Hapus file fisik dari disk (jika ada)
+    const filePath = path.join(__dirname, "../..", photo.photo_url);
+    if (fs.existsSync(filePath)) {
+      try { fs.unlinkSync(filePath); } catch { /* skip */ }
+    }
+
+    await photo.destroy();
+  },
+
+  addWorkLogPhotos: async (projectId, logId, files, actor) => {
+    await getScopedProject(projectId, actor);
+    const log = await WorkLog.findOne({ where: { id: logId, project_id: projectId } });
+    if (!log) throw { message: "Work log tidak ditemukan", status: 404 };
+
+    if (!files?.length) return [];
+
+    const dir = path.join(__dirname, "../../uploads/work-logs");
+    ensureUploadDir(dir);
+    const photos = files.map((file) => ({
+      work_log_id: logId,
+      photo_url: `/uploads/work-logs/${file.filename}`,
+      caption: file.originalname,
+    }));
+    return WorkLogPhoto.bulkCreate(photos);
+  },
 };

@@ -255,7 +255,7 @@ module.exports = {
 
     await sequelize.transaction(async (t) => {
       // 1. Unbind lead reservations
-      const { HousingUnit, Project, ProjectUnit, WorkLog, WorkLogPhoto, InventoryLog, TimeScheduleItem, QcSubmission, QcSubmissionResult, Akad, Bast, Ppjb, PindahUnit, Pembatalan, HousingPaymentHistory, Transaction, MarketingPerson, Consumer, Lead, QcTemplate, QcTemplateSection, QcTemplateItem, UnitStatus, ConstructionStatus, WorkLocation, AttendanceSetting, Attendance, User, Department, Material } = sequelize.models;
+      const { HousingUnit, Project, ProjectUnit, WorkLog, WorkLogPhoto, InventoryLog, TimeScheduleItem, QcSubmission, QcSubmissionResult, Akad, Bast, Ppjb, PindahUnit, Pembatalan, HousingPaymentHistory, Transaction, MarketingPerson, Consumer, Lead, QcTemplate, QcTemplateSection, QcTemplateItem, UnitStatus, ConstructionStatus, WorkLocation, AttendanceSetting, Attendance, User, Department, Material, PermintaanMaterial, PermintaanMaterialItem, SuratJalan, SuratJalanItem, TandaTerimaGudang, TandaTerimaGudangItem, BarangKeluar, BarangKeluarItem, InventarisLapangan } = sequelize.models;
 
       await HousingUnit.update({ reserved_lead_id: null }, { where: { company_id: id }, transaction: t });
 
@@ -285,6 +285,47 @@ module.exports = {
         if (qcSubmissionIds.length > 0) {
           await QcSubmissionResult.destroy({ where: { submission_id: qcSubmissionIds }, transaction: t });
           await QcSubmission.destroy({ where: { id: qcSubmissionIds }, transaction: t });
+        }
+
+        // SOP modules reset
+        if (PermintaanMaterial && PermintaanMaterialItem) {
+          const pms = await PermintaanMaterial.findAll({ where: { project_id: projectIds }, transaction: t });
+          const pmIds = pms.map(x => x.id);
+          if (pmIds.length > 0) {
+            await PermintaanMaterialItem.destroy({ where: { permintaan_material_id: pmIds }, transaction: t });
+            await PermintaanMaterial.destroy({ where: { id: pmIds }, transaction: t });
+          }
+        }
+
+        if (SuratJalan && SuratJalanItem) {
+          const sjs = await SuratJalan.findAll({ where: { project_id: projectIds }, transaction: t });
+          const sjIds = sjs.map(x => x.id);
+          if (sjIds.length > 0) {
+            await SuratJalanItem.destroy({ where: { surat_jalan_id: sjIds }, transaction: t });
+            await SuratJalan.destroy({ where: { id: sjIds }, transaction: t });
+          }
+        }
+
+        if (TandaTerimaGudang && TandaTerimaGudangItem) {
+          const tgs = await TandaTerimaGudang.findAll({ where: { project_id: projectIds }, transaction: t });
+          const tgIds = tgs.map(x => x.id);
+          if (tgIds.length > 0) {
+            await TandaTerimaGudangItem.destroy({ where: { tanda_terima_gudang_id: tgIds }, transaction: t });
+            await TandaTerimaGudang.destroy({ where: { id: tgIds }, transaction: t });
+          }
+        }
+
+        if (BarangKeluar && BarangKeluarItem) {
+          const bks = await BarangKeluar.findAll({ where: { project_id: projectIds }, transaction: t });
+          const bkIds = bks.map(x => x.id);
+          if (bkIds.length > 0) {
+            await BarangKeluarItem.destroy({ where: { barang_keluar_id: bkIds }, transaction: t });
+            await BarangKeluar.destroy({ where: { id: bkIds }, transaction: t });
+          }
+        }
+
+        if (InventarisLapangan) {
+          await InventarisLapangan.destroy({ where: { project_id: projectIds }, transaction: t });
         }
       }
 

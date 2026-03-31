@@ -270,4 +270,18 @@ module.exports = {
       return success(res, r, "Work log diperbarui");
     } catch (e) { return error(res, e.message, e.status || 500); }
   },
+
+  deleteWorkLogPhoto: async (req, res) => {
+    try {
+      await svc.deleteWorkLogPhoto(req.params.projectId, req.params.logId, req.params.photoId, req.user);
+      return success(res, null, "Foto berhasil dihapus");
+    } catch (e) { return error(res, e.message, e.status || 500); }
+  },
+
+  addWorkLogPhotos: async (req, res) => {
+    try {
+      const r = await svc.addWorkLogPhotos(req.params.projectId, req.params.logId, req.files, req.user);
+      return created(res, r, "Foto berhasil ditambahkan");
+    } catch (e) { return error(res, e.message, e.status || 500); }
+  },
 };

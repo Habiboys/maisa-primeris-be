@@ -10,7 +10,7 @@ module.exports = (sequelize, DataTypes) => {
     id         : { type: DataTypes.UUID, defaultValue: DataTypes.UUIDV4, primaryKey: true },
     company_id : DataTypes.UUID,
     name       : { type: DataTypes.STRING(100), allowNull: false },
-    color      : DataTypes.STRING(20),
+    color      : DataTypes.STRING(100),
     progress   : { type: DataTypes.INTEGER, defaultValue: 0 },
     order_index: { type: DataTypes.INTEGER, defaultValue: 0 },
   }, { sequelize, modelName: 'ConstructionStatus', tableName: 'construction_statuses', underscored: true });

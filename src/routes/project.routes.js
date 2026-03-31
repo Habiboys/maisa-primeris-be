@@ -59,4 +59,8 @@ router.get("/projects/:projectId/work-logs", withTenant, ctrl.listWorkLogs);
 router.post("/projects/:projectId/work-logs", requirePM, upload.array("photos", 10), ctrl.createWorkLog);
 router.put("/projects/:projectId/work-logs/:logId", requirePM, ctrl.updateWorkLog);
 
+// Work log photos
+router.delete("/projects/:projectId/work-logs/:logId/photos/:photoId", requirePM, ctrl.deleteWorkLogPhoto);
+router.post("/projects/:projectId/work-logs/:logId/photos", requirePM, upload.array("photos", 10), ctrl.addWorkLogPhotos);
+
 module.exports = router;
