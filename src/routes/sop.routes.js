@@ -13,7 +13,9 @@ router.use(authenticate, ensureTenantContext);
 // Permintaan Material
 router.get   ('/material-requests',              SA_PM, ctrl.listPermintaan);
 router.post  ('/material-requests',              SA_PM, ctrl.createPermintaan);
+router.put   ('/material-requests/:id',          SA_PM, ctrl.updatePermintaan);
 router.get   ('/material-requests/:id',          SA_PM, ctrl.getPermintaan);
+router.get   ('/material-requests/:id/pdf',      SA_PM, ctrl.pdfPermintaanById);
 router.patch ('/material-requests/:id/approve',  SA,    ctrl.approvePermintaan);
 router.patch ('/material-requests/:id/reject',   SA,    ctrl.rejectPermintaan);
 router.delete('/material-requests/:id',          SA,    ctrl.removePermintaan);
@@ -23,6 +25,7 @@ router.post  ('/sop/pdf/permintaan',             SA_PM, ctrl.pdfPermintaan);
 // Tanda Terima Gudang
 router.get   ('/warehouse-receipts',             SA_PM, ctrl.listTTG);
 router.post  ('/warehouse-receipts',             SA_PM, ctrl.createTTG);
+router.put   ('/warehouse-receipts/:id',         SA_PM, ctrl.updateTTG);
 router.get   ('/warehouse-receipts/:id/pdf',     SA_PM, ctrl.pdfTTGById);
 router.patch ('/warehouse-receipts/:id/verify',  SA,    ctrl.verifyTTG);
 router.delete('/warehouse-receipts/:id',         SA,    ctrl.removeTTG);
@@ -32,7 +35,9 @@ router.post  ('/sop/pdf/ttg',                    SA_PM, ctrl.pdfTTG);
 // Barang Keluar
 router.get   ('/goods-out',              SA_PM, ctrl.listBarangKeluar);
 router.post  ('/goods-out',              SA_PM, ctrl.createBarangKeluar);
-router.get   ('/goods-out/:id/pdf',       SA_PM, ctrl.pdfBarangKeluarById);
+router.put   ('/goods-out/:id',          SA_PM, ctrl.updateBarangKeluar);
+router.get   ('/goods-out/:id/pdf',      SA_PM, ctrl.pdfBarangKeluarById);
+router.patch ('/goods-out/:id/verify',   SA_PM, ctrl.verifyBarangKeluar);
 router.delete('/goods-out/:id',          SA,    ctrl.removeBarangKeluar);
 router.post  ('/sop/preview/barang-keluar', SA_PM, ctrl.previewBarangKeluar);
 router.post  ('/sop/pdf/barang-keluar',     SA_PM, ctrl.pdfBarangKeluar);
@@ -50,6 +55,7 @@ router.post  ('/sop/pdf/inventaris',     SA_PM, ctrl.pdfInventaris);
 // Surat Jalan
 router.get   ('/delivery-orders',               SA_PM, ctrl.listSuratJalan);
 router.post  ('/delivery-orders',               SA_PM, ctrl.createSuratJalan);
+router.put   ('/delivery-orders/:id',           SA_PM, ctrl.updateSuratJalan);
 router.get   ('/delivery-orders/:id/pdf',       SA_PM, ctrl.pdfSuratJalanById);
 router.patch ('/delivery-orders/:id/status',    SA_PM, ctrl.updateSuratJalanStatus);
 router.delete('/delivery-orders/:id',           SA,    ctrl.removeSuratJalan);

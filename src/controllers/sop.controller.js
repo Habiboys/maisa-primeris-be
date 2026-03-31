@@ -6,19 +6,36 @@ const { success, created, error } = require('../utils/response');
 const { Company } = require('../models');
 
 async function injectCompanyName(req, payloadData) {
-  if (!req.user || !req.user.company_id) return { ...payloadData };
-  const c = await Company.findByPk(req.user.company_id, { attributes: ['name'] });
-  return { ...payloadData, companyName: c ? c.name : 'MAISA PRIMERIS' };
+  try {
+    if (!req.user || !req.user.company_id) return { ...payloadData, companyName: 'MAISA PRIMERIS' };
+    const c = await Company.findByPk(req.user.company_id, { attributes: ['name'] });
+    return { ...payloadData, companyName: c ? c.name : 'MAISA PRIMERIS' };
+  } catch (err) {
+    console.error('generate SOP pdf/preview error:', err.message);
+    return { ...payloadData, companyName: 'MAISA PRIMERIS' };
+  }
+}
+
+function permintaanRecordToPayload(r) {
+  return {
+    noForm: r.nomor,
+    tanggal: r.request_date,
+    divisi: r.divisi ?? '',
+    namaPeminta: r.requester?.name ?? '',
+    items: (r.items || []).map(i => ({ namaBarang: i.item_name, qty: i.qty_requested, satuan: i.unit, keterangan: i.notes })),
+    disetujui: r.signature_disetujui ?? '',
+    diperiksa: r.signature_diperiksa ?? '',
+  };
 }
 
 function ttgRecordToPayload(r) {
   return {
     noTerima: r.nomor,
     supplier: r.supplier,
-    penerima: r.receiver?.name ?? '',
+    penerima: r.signature_penerima ?? r.receiver?.name ?? '',
     items: (r.items || []).map(i => ({ namaBarang: i.item_name, qty: i.qty_received, satuan: i.unit })),
-    mengetahui: '',
-    pengirim: '',
+    mengetahui: r.signature_mengetahui ?? '',
+    pengirim: r.signature_pengirim ?? '',
   };
 }
 function bkRecordToPayload(r) {
@@ -26,10 +43,10 @@ function bkRecordToPayload(r) {
     noForm: r.nomor,
     tujuan: r.received_by,
     penerima: r.received_by,
-    project: '',
+    project: r.projectModel ? r.projectModel.name : '',
     items: (r.items || []).map(i => ({ namaBarang: i.item_name, qty: i.qty, satuan: i.unit })),
-    disetujui: '',
-    diperiksa: '',
+    disetujui: r.signature_disetujui ?? '',
+    diperiksa: r.signature_diperiksa ?? '',
   };
 }
 function sjRecordToPayload(r) {
@@ -38,12 +55,12 @@ function sjRecordToPayload(r) {
     tanggal: r.send_date,
     nomorPO: '',
     kepada: r.destination,
-    dikirimDengan: '',
+    dikirimDengan: r.dikirim_dengan ?? '',
     noPolisi: r.vehicle_no,
     namaPengemudi: r.driver_name,
     items: (r.items || []).map(i => ({ namaBarang: i.item_name, jumlah: i.qty, satuan: i.unit })),
-    mengetahui: r.issuer?.name ?? '',
-    pengemudi: r.driver_name,
+    mengetahui: r.signature_mengetahui ?? r.issuer?.name ?? '',
+    pengemudi: r.signature_pengemudi ?? r.driver_name,
   };
 }
 
@@ -59,8 +76,9 @@ function inventarisRecordToPayload(r) {
       tandaTangan: '',
       lokasi: r.location,
     }],
-    disetujui: '',
-    diperiksa: '',
+    disetujui: r.signature_disetujui ?? '',
+    diperiksa: r.signature_diperiksa ?? '',
+    logistik: r.signature_logistik ?? '',
     penanggungJawab: r.penanggungJawab ?? '',
     tanggal: r.last_check,
   };
@@ -71,6 +89,7 @@ module.exports = {
   listPermintaan  : async (req, res) => { try { const r = await svc.listPermintaan(req.query, req.user);                     return res.json({ success:true, ...r, message:'Daftar permintaan material' }); } catch(e){ return error(res,e.message,e.status||500); } },
   getPermintaan   : async (req, res) => { try { const r = await svc.getPermintaanById(req.params.id, req.user);              return success(res,r,'Detail permintaan'); }                           catch(e){ return error(res,e.message,e.status||500); } },
   createPermintaan: async (req, res) => { try { const r = await svc.createPermintaan(req.body, req.user.id, req.user);       return created(res,r,'Permintaan berhasil dibuat'); }                  catch(e){ return error(res,e.message,e.status||500); } },
+  updatePermintaan: async (req, res) => { try { const r = await svc.updatePermintaan(req.params.id, req.body, req.user);     return success(res,r,'Permintaan diperbarui'); }                       catch(e){ return error(res,e.message,e.status||500); } },
   approvePermintaan: async(req, res) => { try { const r = await svc.approvePermintaan(req.params.id, req.user);             return success(res,r,'Permintaan disetujui'); }                        catch(e){ return error(res,e.message,e.status||500); } },
   rejectPermintaan : async(req, res) => { try { const r = await svc.rejectPermintaan(req.params.id, req.user);              return success(res,r,'Permintaan ditolak'); }                          catch(e){ return error(res,e.message,e.status||500); } },
   removePermintaan : async(req, res) => { try { await svc.removePermintaan(req.params.id, req.user);                        return success(res,null,'Permintaan dihapus'); }                       catch(e){ return error(res,e.message,e.status||500); } },
@@ -78,12 +97,15 @@ module.exports = {
   // Tanda Terima Gudang
   listTTG    : async (req, res) => { try { const r = await svc.listTTG(req.query, req.user);                                return res.json({ success:true, ...r, message:'Daftar TTG' }); }       catch(e){ return error(res,e.message,e.status||500); } },
   createTTG  : async (req, res) => { try { const r = await svc.createTTG(req.body, req.user.id, req.user);                 return created(res,r,'TTG berhasil dibuat'); }                          catch(e){ return error(res,e.message,e.status||500); } },
+  updateTTG  : async (req, res) => { try { const r = await svc.updateTTG(req.params.id, req.body, req.user);               return success(res,r,'TTG diperbarui'); }                               catch(e){ return error(res,e.message,e.status||500); } },
   verifyTTG  : async (req, res) => { try { const r = await svc.verifyTTG(req.params.id, req.user);                        return success(res,r,'TTG terverifikasi'); }                             catch(e){ return error(res,e.message,e.status||500); } },
   removeTTG  : async (req, res) => { try { await svc.removeTTG(req.params.id, req.user);                                  return success(res,null,'TTG dihapus'); }                                catch(e){ return error(res,e.message,e.status||500); } },
 
   // Barang Keluar
   listBarangKeluar  : async (req, res) => { try { const r = await svc.listBarangKeluar(req.query, req.user);               return res.json({ success:true, ...r, message:'Daftar barang keluar' }); } catch(e){ return error(res,e.message,e.status||500); } },
   createBarangKeluar: async (req, res) => { try { const r = await svc.createBarangKeluar(req.body, req.user.id, req.user); return created(res,r,'Barang keluar berhasil dicatat'); }               catch(e){ return error(res,e.message,e.status||500); } },
+  updateBarangKeluar: async (req, res) => { try { const r = await svc.updateBarangKeluar(req.params.id, req.body, req.user); return success(res,r,'Barang keluar diperbarui'); }                   catch(e){ return error(res,e.message,e.status||500); } },
+  verifyBarangKeluar: async (req, res) => { try { const r = await svc.verifyBarangKeluar(req.params.id, req.user);         return success(res,r,'Barang keluar diselesaikan'); }                     catch(e){ return error(res,e.message,e.status||500); } },
   removeBarangKeluar: async (req, res) => { try { await svc.removeBarangKeluar(req.params.id, req.user);                   return success(res,null,'Barang keluar dihapus'); }                    catch(e){ return error(res,e.message,e.status||500); } },
 
   // Inventaris
@@ -96,6 +118,7 @@ module.exports = {
   // Surat Jalan
   listSuratJalan      : async (req, res) => { try { const r = await svc.listSuratJalan(req.query, req.user);               return res.json({ success:true, ...r, message:'Daftar surat jalan' }); } catch(e){ return error(res,e.message,e.status||500); } },
   createSuratJalan    : async (req, res) => { try { const r = await svc.createSuratJalan(req.body, req.user.id, req.user); return created(res,r,'Surat jalan berhasil dibuat'); }                 catch(e){ return error(res,e.message,e.status||500); } },
+  updateSuratJalan    : async (req, res) => { try { const r = await svc.updateSuratJalan(req.params.id, req.body, req.user); return success(res,r,'Surat jalan diperbarui'); }                    catch(e){ return error(res,e.message,e.status||500); } },
   updateSuratJalanStatus: async(req,res) => { try { const r = await svc.updateSuratJalanStatus(req.params.id, req.body.status, req.user); return success(res,r,'Status diperbarui'); }           catch(e){ return error(res,e.message,e.status||500); } },
   removeSuratJalan    : async (req, res) => { try { await svc.removeSuratJalan(req.params.id, req.user);                   return success(res,null,'Surat jalan dihapus'); }                      catch(e){ return error(res,e.message,e.status||500); } },
 
@@ -118,4 +141,5 @@ module.exports = {
 
   previewPermintaan   : async (req, res) => { try { const p = await injectCompanyName(req, req.body); const html = pdfSvc.buildPermintaanHtml(p);   return res.type('html').send(html); } catch(e){ return error(res,e.message,e.status||500); } },
   pdfPermintaan       : async (req, res) => { try { const p = await injectCompanyName(req, req.body); const buf = await pdfSvc.buildPermintaanPdf(p); res.setHeader('Content-Disposition', 'attachment; filename="PermintaanMaterial.pdf"'); res.type('application/pdf').send(buf); } catch(e){ return error(res,e.message,e.status||500); } },
+  pdfPermintaanById   : async (req, res) => { try { const r = await svc.getPermintaanById(req.params.id, req.user); const p = await injectCompanyName(req, permintaanRecordToPayload(r)); const buf = await pdfSvc.buildPermintaanPdf(p); res.setHeader('Content-Disposition', 'attachment; filename="PermintaanMaterial.pdf"'); res.type('application/pdf').send(buf); } catch(e){ return error(res,e.message,e.status||500); } },
 };
