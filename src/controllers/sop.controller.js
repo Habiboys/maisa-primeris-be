@@ -3,6 +3,13 @@
 const svc = require('../services/sop.service');
 const pdfSvc = require('../services/sopPdf.service');
 const { success, created, error } = require('../utils/response');
+const { Company } = require('../models');
+
+async function injectCompanyName(req, payloadData) {
+  if (!req.user || !req.user.company_id) return { ...payloadData };
+  const c = await Company.findByPk(req.user.company_id, { attributes: ['name'] });
+  return { ...payloadData, companyName: c ? c.name : 'MAISA PRIMERIS' };
+}
 
 function ttgRecordToPayload(r) {
   return {
@@ -93,22 +100,22 @@ module.exports = {
   removeSuratJalan    : async (req, res) => { try { await svc.removeSuratJalan(req.params.id, req.user);                   return success(res,null,'Surat jalan dihapus'); }                      catch(e){ return error(res,e.message,e.status||500); } },
 
   // ── PDF & Preview (server-side generate) ───────────────────────
-  previewTTG   : async (req, res) => { try { const html = pdfSvc.buildTTGHtml(req.body);                 return res.type('html').send(html); } catch(e){ return error(res,e.message,e.status||500); } },
-  pdfTTG       : async (req, res) => { try { const buf = await pdfSvc.buildTTGPdf(req.body);             res.setHeader('Content-Disposition', 'attachment; filename="TTG.pdf"'); res.type('application/pdf').send(buf); } catch(e){ return error(res,e.message,e.status||500); } },
-  pdfTTGById   : async (req, res) => { try { const r = await svc.getTTGById(req.params.id, req.user);     const buf = await pdfSvc.buildTTGPdf(ttgRecordToPayload(r)); res.setHeader('Content-Disposition', 'attachment; filename="TTG.pdf"'); res.type('application/pdf').send(buf); } catch(e){ return error(res,e.message,e.status||500); } },
+  previewTTG   : async (req, res) => { try { const p = await injectCompanyName(req, req.body); const html = pdfSvc.buildTTGHtml(p);                 return res.type('html').send(html); } catch(e){ return error(res,e.message,e.status||500); } },
+  pdfTTG       : async (req, res) => { try { const p = await injectCompanyName(req, req.body); const buf = await pdfSvc.buildTTGPdf(p);             res.setHeader('Content-Disposition', 'attachment; filename="TTG.pdf"'); res.type('application/pdf').send(buf); } catch(e){ return error(res,e.message,e.status||500); } },
+  pdfTTGById   : async (req, res) => { try { const r = await svc.getTTGById(req.params.id, req.user);     const p = await injectCompanyName(req, ttgRecordToPayload(r)); const buf = await pdfSvc.buildTTGPdf(p); res.setHeader('Content-Disposition', 'attachment; filename="TTG.pdf"'); res.type('application/pdf').send(buf); } catch(e){ return error(res,e.message,e.status||500); } },
 
-  previewBarangKeluar : async (req, res) => { try { const html = pdfSvc.buildBarangKeluarHtml(req.body); return res.type('html').send(html); } catch(e){ return error(res,e.message,e.status||500); } },
-  pdfBarangKeluar     : async (req, res) => { try { const buf = await pdfSvc.buildBarangKeluarPdf(req.body); res.setHeader('Content-Disposition', 'attachment; filename="BarangKeluar.pdf"'); res.type('application/pdf').send(buf); } catch(e){ return error(res,e.message,e.status||500); } },
-  pdfBarangKeluarById : async (req, res) => { try { const r = await svc.getBarangKeluarById(req.params.id, req.user); const buf = await pdfSvc.buildBarangKeluarPdf(bkRecordToPayload(r)); res.setHeader('Content-Disposition', 'attachment; filename="BarangKeluar.pdf"'); res.type('application/pdf').send(buf); } catch(e){ return error(res,e.message,e.status||500); } },
+  previewBarangKeluar : async (req, res) => { try { const p = await injectCompanyName(req, req.body); const html = pdfSvc.buildBarangKeluarHtml(p); return res.type('html').send(html); } catch(e){ return error(res,e.message,e.status||500); } },
+  pdfBarangKeluar     : async (req, res) => { try { const p = await injectCompanyName(req, req.body); const buf = await pdfSvc.buildBarangKeluarPdf(p); res.setHeader('Content-Disposition', 'attachment; filename="BarangKeluar.pdf"'); res.type('application/pdf').send(buf); } catch(e){ return error(res,e.message,e.status||500); } },
+  pdfBarangKeluarById : async (req, res) => { try { const r = await svc.getBarangKeluarById(req.params.id, req.user); const p = await injectCompanyName(req, bkRecordToPayload(r)); const buf = await pdfSvc.buildBarangKeluarPdf(p); res.setHeader('Content-Disposition', 'attachment; filename="BarangKeluar.pdf"'); res.type('application/pdf').send(buf); } catch(e){ return error(res,e.message,e.status||500); } },
 
-  previewSuratJalan   : async (req, res) => { try { const html = pdfSvc.buildSuratJalanHtml(req.body);   return res.type('html').send(html); } catch(e){ return error(res,e.message,e.status||500); } },
-  pdfSuratJalan       : async (req, res) => { try { const buf = await pdfSvc.buildSuratJalanPdf(req.body); res.setHeader('Content-Disposition', 'attachment; filename="SuratJalan.pdf"'); res.type('application/pdf').send(buf); } catch(e){ return error(res,e.message,e.status||500); } },
-  pdfSuratJalanById   : async (req, res) => { try { const r = await svc.getSuratJalanById(req.params.id, req.user); const buf = await pdfSvc.buildSuratJalanPdf(sjRecordToPayload(r)); res.setHeader('Content-Disposition', 'attachment; filename="SuratJalan.pdf"'); res.type('application/pdf').send(buf); } catch(e){ return error(res,e.message,e.status||500); } },
+  previewSuratJalan   : async (req, res) => { try { const p = await injectCompanyName(req, req.body); const html = pdfSvc.buildSuratJalanHtml(p);   return res.type('html').send(html); } catch(e){ return error(res,e.message,e.status||500); } },
+  pdfSuratJalan       : async (req, res) => { try { const p = await injectCompanyName(req, req.body); const buf = await pdfSvc.buildSuratJalanPdf(p); res.setHeader('Content-Disposition', 'attachment; filename="SuratJalan.pdf"'); res.type('application/pdf').send(buf); } catch(e){ return error(res,e.message,e.status||500); } },
+  pdfSuratJalanById   : async (req, res) => { try { const r = await svc.getSuratJalanById(req.params.id, req.user); const p = await injectCompanyName(req, sjRecordToPayload(r)); const buf = await pdfSvc.buildSuratJalanPdf(p); res.setHeader('Content-Disposition', 'attachment; filename="SuratJalan.pdf"'); res.type('application/pdf').send(buf); } catch(e){ return error(res,e.message,e.status||500); } },
 
-  previewInventaris   : async (req, res) => { try { const html = pdfSvc.buildInventarisHtml(req.body);   return res.type('html').send(html); } catch(e){ return error(res,e.message,e.status||500); } },
-  pdfInventaris       : async (req, res) => { try { const buf = await pdfSvc.buildInventarisPdf(req.body); res.setHeader('Content-Disposition', 'attachment; filename="Inventaris.pdf"'); res.type('application/pdf').send(buf); } catch(e){ return error(res,e.message,e.status||500); } },
-  pdfInventarisById   : async (req, res) => { try { const r = await svc.getInventarisById(req.params.id, req.user); const buf = await pdfSvc.buildInventarisPdf(inventarisRecordToPayload(r)); res.setHeader('Content-Disposition', 'attachment; filename="Inventaris.pdf"'); res.type('application/pdf').send(buf); } catch(e){ return error(res,e.message,e.status||500); } },
+  previewInventaris   : async (req, res) => { try { const p = await injectCompanyName(req, req.body); const html = pdfSvc.buildInventarisHtml(p);   return res.type('html').send(html); } catch(e){ return error(res,e.message,e.status||500); } },
+  pdfInventaris       : async (req, res) => { try { const p = await injectCompanyName(req, req.body); const buf = await pdfSvc.buildInventarisPdf(p); res.setHeader('Content-Disposition', 'attachment; filename="Inventaris.pdf"'); res.type('application/pdf').send(buf); } catch(e){ return error(res,e.message,e.status||500); } },
+  pdfInventarisById   : async (req, res) => { try { const r = await svc.getInventarisById(req.params.id, req.user); const p = await injectCompanyName(req, inventarisRecordToPayload(r)); const buf = await pdfSvc.buildInventarisPdf(p); res.setHeader('Content-Disposition', 'attachment; filename="Inventaris.pdf"'); res.type('application/pdf').send(buf); } catch(e){ return error(res,e.message,e.status||500); } },
 
-  previewPermintaan   : async (req, res) => { try { const html = pdfSvc.buildPermintaanHtml(req.body);   return res.type('html').send(html); } catch(e){ return error(res,e.message,e.status||500); } },
-  pdfPermintaan       : async (req, res) => { try { const buf = await pdfSvc.buildPermintaanPdf(req.body); res.setHeader('Content-Disposition', 'attachment; filename="PermintaanMaterial.pdf"'); res.type('application/pdf').send(buf); } catch(e){ return error(res,e.message,e.status||500); } },
+  previewPermintaan   : async (req, res) => { try { const p = await injectCompanyName(req, req.body); const html = pdfSvc.buildPermintaanHtml(p);   return res.type('html').send(html); } catch(e){ return error(res,e.message,e.status||500); } },
+  pdfPermintaan       : async (req, res) => { try { const p = await injectCompanyName(req, req.body); const buf = await pdfSvc.buildPermintaanPdf(p); res.setHeader('Content-Disposition', 'attachment; filename="PermintaanMaterial.pdf"'); res.type('application/pdf').send(buf); } catch(e){ return error(res,e.message,e.status||500); } },
 };

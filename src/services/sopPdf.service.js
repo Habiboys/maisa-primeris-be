@@ -78,7 +78,8 @@ function buildPermintaanPdf(payload) {
     doc.on('error', reject);
 
     const d = normalizePermintaan(payload);
-    addHeader(doc);
+    const companyName = payload.companyName || 'MAISA PRIMERIS';
+    addHeader(doc, companyName);
     addTitle(doc, 'PERMINTAAN MATERIAL', `Nomor: ${d.noForm}`);
 
     doc.fontSize(FONT_SIZE).font('Helvetica');
@@ -138,7 +139,7 @@ th{font-weight:700;background:#f5f5f5;}
 .sig{display:inline-block;width:30%;margin-top:20px;}
 .sig span{display:block;border-bottom:1px solid #333;font-size:8px;margin-bottom:4px;}
 </style></head><body>
-<p style="font-weight:700;font-size:10px;">MAISA PRIMERIS</p>
+<p style="font-weight:700;font-size:10px;">${escapeHtml(payload.companyName || 'MAISA PRIMERIS')}</p>
 <h1>PERMINTAAN MATERIAL</h1>
 <p class="meta" style="text-align:center;">Nomor: ${escapeHtml(d.noForm)}</p>
 <div class="meta">
@@ -188,7 +189,8 @@ function buildTTGPdf(payload) {
     doc.on('error', reject);
 
     const d = normalizeTTG(payload);
-    addHeader(doc);
+    const companyName = payload.companyName || 'MAISA PRIMERIS';
+    addHeader(doc, companyName);
     addTitle(doc, 'TANDA TERIMA GUDANG', `Nomor: ${d.noTerima}`);
 
     doc.fontSize(FONT_SIZE).font('Helvetica');
@@ -243,7 +245,7 @@ th{font-weight:700;background:#f5f5f5;}
 .sig{display:inline-block;width:30%;margin-top:24px;vertical-align:top;}
 .sig span{display:block;border-bottom:1px solid #333;padding-bottom:2px;font-size:8px;margin-bottom:4px;}
 </style></head><body>
-<p style="font-weight:700;font-size:10px;">MAISA PRIMERIS</p>
+<p style="font-weight:700;font-size:10px;">${escapeHtml(payload.companyName || 'MAISA PRIMERIS')}</p>
 <p class="meta">JL. Batang Marao No.9, Padang</p>
 <h1>TANDA TERIMA GUDANG</h1>
 <p class="meta" style="text-align:center;">Nomor: ${escapeHtml(d.noTerima)}</p>
@@ -288,7 +290,8 @@ function buildBarangKeluarPdf(payload) {
     doc.on('error', reject);
 
     const d = normalizeBK(payload);
-    addHeader(doc);
+    const companyName = payload.companyName || 'MAISA PRIMERIS';
+    addHeader(doc, companyName);
     addTitle(doc, 'BARANG KELUAR', `Nomor: ${d.noForm}`);
 
     doc.fontSize(FONT_SIZE).font('Helvetica');
@@ -334,7 +337,7 @@ th{font-weight:700;background:#f5f5f5;}
 .sig{display:inline-block;width:30%;margin-top:20px;}
 .sig span{display:block;border-bottom:1px solid #333;font-size:8px;margin-bottom:4px;}
 </style></head><body>
-<p style="font-weight:700;font-size:10px;">MAISA PRIMERIS</p>
+<p style="font-weight:700;font-size:10px;">${escapeHtml(payload.companyName || 'MAISA PRIMERIS')}</p>
 <h1>BARANG KELUAR</h1>
 <p style="text-align:center;">Nomor: ${escapeHtml(d.noForm)}</p>
 <p>Tujuan: ${escapeHtml(d.tujuan)} &nbsp; Penerima: ${escapeHtml(d.penerima)} &nbsp; Proyek: ${escapeHtml(d.project)}</p>
@@ -378,7 +381,8 @@ function buildSuratJalanPdf(payload) {
     doc.on('error', reject);
 
     const d = normalizeSJ(payload);
-    addHeader(doc);
+    const companyName = payload.companyName || 'MAISA PRIMERIS';
+    addHeader(doc, companyName);
     addTitle(doc, 'SURAT JALAN', `Nomor: ${d.nomorSurat}`);
 
     doc.fontSize(FONT_SIZE).font('Helvetica');
@@ -428,7 +432,7 @@ th{font-weight:700;background:#f5f5f5;}
 .sig{display:inline-block;width:30%;margin-top:20px;}
 .sig span{display:block;border-bottom:1px solid #333;font-size:8px;margin-bottom:4px;}
 </style></head><body>
-<p style="font-weight:700;font-size:10px;">MAISA PRIMERIS</p>
+<p style="font-weight:700;font-size:10px;">${escapeHtml(payload.companyName || 'MAISA PRIMERIS')}</p>
 <h1>SURAT JALAN</h1>
 <p style="text-align:center;">Nomor: ${escapeHtml(d.nomorSurat)}</p>
 <div class="meta">
@@ -475,7 +479,8 @@ function buildInventarisPdf(payload) {
     doc.on('error', reject);
 
     const d = normalizeInventaris(payload);
-    addHeader(doc, 'MAISA PRIMERIS', 'DAFTAR INVENTARIS LAPANGAN');
+    const companyName = payload.companyName || 'MAISA PRIMERIS';
+    addHeader(doc, companyName, 'DAFTAR INVENTARIS LAPANGAN');
     addTitle(doc, 'DAFTAR INVENTARIS LAPANGAN');
 
     const pageWidth = doc.page.width - 2 * MARGIN;
@@ -538,7 +543,7 @@ th{font-weight:700;background:#f5f5f5;}
 .sig{display:inline-block;width:30%;margin-top:16px;}
 .sig span{display:block;border-bottom:1px solid #333;font-size:8px;margin-bottom:4px;}
 </style></head><body>
-<p style="font-weight:700;font-size:10px;">MAISA PRIMERIS</p>
+<p style="font-weight:700;font-size:10px;">${escapeHtml(payload.companyName || 'MAISA PRIMERIS')}</p>
 <h1>DAFTAR INVENTARIS LAPANGAN</h1>
 <p style="text-align:right;font-size:8px;">Tanggal: ${d.tanggal}</p>
 <table>
