@@ -296,6 +296,11 @@ module.exports = {
   removeProject: async (id, actor) => {
     const p = await Project.findOne({ where: withTenantWhere({ id }, actor) });
     if (!p) throw { message: "Proyek tidak ditemukan", status: 404 };
+    const units = await ProjectUnit.findAll({ where: { project_id: id }, attributes: ['id'] });
+    const unitIds = units.map(u => u.id);
+    if (unitIds.length > 0) {
+      await HousingUnit.destroy({ where: { project_unit_id: unitIds } });
+    }
     await p.destroy();
   },
 
@@ -364,6 +369,7 @@ module.exports = {
     await getScopedProject(projectId, actor);
     const u = await ProjectUnit.findOne({ where: { project_id: projectId, no: unitNo } });
     if (!u) throw { message: "Unit tidak ditemukan", status: 404 };
+    await HousingUnit.destroy({ where: { project_unit_id: u.id } });
     await u.destroy();
     await recalculateProjectProgress(projectId);
   },
@@ -497,6 +503,23 @@ module.exports = {
     if (!log) throw { message: "Work log tidak ditemukan", status: 404 };
     await log.update(payload);
     return log;
+  },
+
+  deleteWorkLog: async (projectId, logId, actor) => {
+    await getScopedProject(projectId, actor);
+    const log = await WorkLog.findOne({ where: { id: logId, project_id: projectId } });
+    if (!log) throw { message: "Work log tidak ditemukan", status: 404 };
+    
+    // Hapus foto-foto fisik
+    const photos = await WorkLogPhoto.findAll({ where: { work_log_id: logId } });
+    for (const photo of photos) {
+      const filePath = path.join(__dirname, "../..", photo.photo_url);
+      if (fs.existsSync(filePath)) {
+        try { fs.unlinkSync(filePath); } catch { /* skip */ }
+      }
+    }
+    
+    await log.destroy();
   },
 
   deleteWorkLogPhoto: async (projectId, logId, photoId, actor) => {

@@ -271,6 +271,13 @@ module.exports = {
     } catch (e) { return error(res, e.message, e.status || 500); }
   },
 
+  deleteWorkLog: async (req, res) => {
+    try {
+      await svc.deleteWorkLog(req.params.projectId, req.params.logId, req.user);
+      return success(res, null, "Work log berhasil dihapus");
+    } catch (e) { return error(res, e.message, e.status || 500); }
+  },
+
   deleteWorkLogPhoto: async (req, res) => {
     try {
       await svc.deleteWorkLogPhoto(req.params.projectId, req.params.logId, req.params.photoId, req.user);
