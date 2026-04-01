@@ -17,6 +17,25 @@ const storage = multer.diskStorage({
 });
 const upload = multer({ storage });
 
+// Multer setup for project layout SVG
+const layoutUploadDir = path.join(__dirname, "../../uploads/project-layouts");
+if (!fs.existsSync(layoutUploadDir)) fs.mkdirSync(layoutUploadDir, { recursive: true });
+const layoutStorage = multer.diskStorage({
+  destination: (_req, _file, cb) => cb(null, layoutUploadDir),
+  filename: (_req, _file, cb) => cb(null, `${Date.now()}-layout.svg`),
+});
+const layoutUpload = multer({ 
+  storage: layoutStorage,
+  fileFilter: (_req, file, cb) => {
+    if (file.mimetype === "image/svg+xml" || file.originalname.endsWith(".svg")) {
+      cb(null, true);
+    } else {
+      cb(new Error("Hanya file SVG yang diizinkan"));
+    }
+  },
+  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB max
+});
+
 // Guards (setiap request wajib punya tenant context untuk scope company_id)
 const withTenant = [authenticate, ensureTenantContext];
 const requirePM = [authenticate, ensureTenantContext, authorize("Super Admin", "Project Management")];
@@ -26,6 +45,7 @@ router.get("/projects", withTenant, ctrl.listProjects);
 router.get("/projects/:id", withTenant, ctrl.getProject);
 router.post("/projects", requirePM, ctrl.createProject);
 router.put("/projects/:id", requirePM, ctrl.updateProject);
+router.patch("/projects/:id/layout-svg", requirePM, layoutUpload.single("layout_svg"), ctrl.updateProjectLayoutSvg);
 router.delete("/projects/:id", requirePM, ctrl.removeProject);
 
 // Units

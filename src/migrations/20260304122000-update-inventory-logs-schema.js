@@ -13,7 +13,7 @@ module.exports = {
 
     // Align columns to README: unit_no, date, item, qty, unit_satuan, person, type ('in'|'out')
     await addIfMissing("unit_no", { type: Sequelize.STRING(20) });
-    await addIfMissing("date", { type: Sequelize.DATEONLY, allowNull: false, defaultValue: Sequelize.fn("CURRENT_DATE") });
+    await addIfMissing("date", { type: Sequelize.DATEONLY, allowNull: false });
     await addIfMissing("item", { type: Sequelize.STRING(200), allowNull: false });
     await addIfMissing("qty", { type: Sequelize.DECIMAL(10, 2), allowNull: false, defaultValue: 0 });
     await addIfMissing("unit_satuan", { type: Sequelize.STRING(30) });

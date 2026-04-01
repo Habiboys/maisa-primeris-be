@@ -112,13 +112,14 @@
 
 ### 3.1 Projects
 
-| Method   | Endpoint        | Deskripsi                                          | Role   |
-| -------- | --------------- | -------------------------------------------------- | ------ |
-| `GET`    | `/projects`     | Daftar semua proyek (filter: type, status, search) | SA, PM |
-| `GET`    | `/projects/:id` | Detail proyek beserta units                        | SA, PM |
-| `POST`   | `/projects`     | Buat proyek baru                                   | SA, PM |
-| `PUT`    | `/projects/:id` | Update data proyek                                 | SA, PM |
-| `DELETE` | `/projects/:id` | Hapus proyek                                       | SA     |
+| Method   | Endpoint                       | Deskripsi                                          | Role   |
+| -------- | ------------------------------ | -------------------------------------------------- | ------ |
+| `GET`    | `/projects`                    | Daftar semua proyek (filter: type, status, search) | SA, PM |
+| `GET`    | `/projects/:id`               | Detail proyek beserta units                        | SA, PM |
+| `POST`   | `/projects`                    | Buat proyek baru                                   | SA, PM |
+| `PUT`    | `/projects/:id`               | Update data proyek                                 | SA, PM |
+| `PATCH`  | `/projects/:id/layout-svg`    | Update layout SVG peta kawasan                     | SA, PM |
+| `DELETE` | `/projects/:id`               | Hapus proyek                                       | SA     |
 
 ### 3.2 Project Units
 
@@ -178,6 +179,29 @@
   "deadline": "Dec 2026",
   "lead": "Ir. Hendra",
   "qc_template_id": "uuid-template"
+}
+```
+
+### Body PATCH `/projects/:id/layout-svg`
+
+> **Content-Type:** `multipart/form-data`
+> **Field:** `layout_svg` (file, type: `.svg`, max: 10MB)
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `layout_svg` | File | Yes | File SVG peta kawasan |
+
+**Response:**
+
+```json
+{
+  "success": true,
+  "data": {
+    "id": "uuid",
+    "name": "Cluster A",
+    "layout_svg": "/uploads/project-layouts/1743400000000-layout.svg"
+  },
+  "message": "Layout SVG berhasil diperbarui"
 }
 ```
 
