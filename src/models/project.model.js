@@ -27,6 +27,7 @@ module.exports = (sequelize, DataTypes) => {
     construction_status: DataTypes.STRING(100),
     budget_cap        : { type: DataTypes.BIGINT, allowNull: true },
     description        : DataTypes.TEXT,
+    layout_svg        : DataTypes.TEXT,
   }, { sequelize, modelName: 'Project', tableName: 'projects', underscored: true });
   return Project;
 };

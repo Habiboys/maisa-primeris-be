@@ -304,6 +304,13 @@ module.exports = {
     await p.destroy();
   },
 
+  updateProjectLayoutSvg: async (id, layoutSvg, actor) => {
+    const p = await Project.findOne({ where: withTenantWhere({ id }, actor) });
+    if (!p) throw { message: "Proyek tidak ditemukan", status: 404 };
+    await p.update({ layout_svg: layoutSvg });
+    return p;
+  },
+
   bulkCreateUnitsForProject: async (projectId, payload, actor) => {
     const project = await getScopedProject(projectId, actor);
     const companyId = project.company_id;

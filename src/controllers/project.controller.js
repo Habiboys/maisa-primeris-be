@@ -23,6 +23,7 @@ const projectSchema = Joi.object({
   deadline: Joi.string().max(50).allow(null, ""),
   budget_cap: Joi.number().integer().min(0).allow(null, ""),
   description: Joi.string().allow(null, ""),
+  layout_svg: Joi.string().allow(null, ""),
 });
 
 const unitSchema = Joi.object({
@@ -118,6 +119,15 @@ module.exports = {
     try {
       await svc.removeProject(req.params.id, req.user);
       return success(res, null, "Proyek berhasil dihapus");
+    } catch (e) { return error(res, e.message, e.status || 500); }
+  },
+
+  updateProjectLayoutSvg: async (req, res) => {
+    if (!req.file) return error(res, "File SVG wajib diupload", 400);
+    try {
+      const filePath = `/uploads/project-layouts/${req.file.filename}`;
+      const r = await svc.updateProjectLayoutSvg(req.params.id, filePath, req.user);
+      return success(res, r, "Layout SVG berhasil diperbarui");
     } catch (e) { return error(res, e.message, e.status || 500); }
   },
 
