@@ -247,6 +247,30 @@ module.exports = {
     return p;
   },
 
+  getProjectLayoutSvgContent: async (id, actor) => {
+    const p = await Project.findOne({ where: withTenantWhere({ id }, actor) });
+    if (!p) throw { message: "Proyek tidak ditemukan", status: 404 };
+    if (!p.layout_svg) throw { message: "Layout SVG belum tersedia", status: 404 };
+
+    const normalized = String(p.layout_svg).replace(/\\/g, '/');
+    const expectedPrefix = '/uploads/project-layouts/';
+    if (!normalized.startsWith(expectedPrefix)) {
+      throw { message: "Path layout SVG tidak valid", status: 400 };
+    }
+
+    const fileName = path.basename(normalized);
+    if (!fileName.toLowerCase().endsWith('.svg')) {
+      throw { message: "File layout harus SVG", status: 400 };
+    }
+
+    const fullPath = path.join(__dirname, '../../uploads/project-layouts', fileName);
+    if (!fs.existsSync(fullPath)) {
+      throw { message: "File layout SVG tidak ditemukan", status: 404 };
+    }
+
+    return fs.readFileSync(fullPath, 'utf-8');
+  },
+
   createProject: async (payload, actor) => {
     const companyId = requireCompanyId(actor);
     const {

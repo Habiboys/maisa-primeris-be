@@ -97,6 +97,14 @@ module.exports = {
     } catch (e) { return error(res, e.message, e.status || 500); }
   },
 
+  getProjectLayoutSvgContent: async (req, res) => {
+    try {
+      const svg = await svc.getProjectLayoutSvgContent(req.params.id, req.user);
+      res.setHeader('Content-Type', 'image/svg+xml; charset=utf-8');
+      return res.status(200).send(svg);
+    } catch (e) { return error(res, e.message, e.status || 500); }
+  },
+
   createProject: async (req, res) => {
     const { error: vErr } = projectSchema.validate(req.body, { abortEarly: false, stripUnknown: true });
     if (vErr) return error(res, "Validasi gagal", 400, vErr.details.map((d) => d.message));

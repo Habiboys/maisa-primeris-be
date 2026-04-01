@@ -43,6 +43,7 @@ const requirePM = [authenticate, ensureTenantContext, authorize("Super Admin", "
 // Projects
 router.get("/projects", withTenant, ctrl.listProjects);
 router.get("/projects/:id", withTenant, ctrl.getProject);
+router.get("/projects/:id/layout-svg-content", withTenant, ctrl.getProjectLayoutSvgContent);
 router.post("/projects", requirePM, ctrl.createProject);
 router.put("/projects/:id", requirePM, ctrl.updateProject);
 router.patch("/projects/:id/layout-svg", requirePM, layoutUpload.single("layout_svg"), ctrl.updateProjectLayoutSvg);
