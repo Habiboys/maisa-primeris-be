@@ -255,7 +255,7 @@ module.exports = {
 
     await sequelize.transaction(async (t) => {
       // 1. Unbind lead reservations
-      const { HousingUnit, Project, ProjectUnit, WorkLog, WorkLogPhoto, InventoryLog, TimeScheduleItem, QcSubmission, QcSubmissionResult, Akad, Bast, Ppjb, PindahUnit, Pembatalan, HousingPaymentHistory, Transaction, MarketingPerson, Consumer, Lead, QcTemplate, QcTemplateSection, QcTemplateItem, UnitStatus, ConstructionStatus, WorkLocation, AttendanceSetting, Attendance, User, Department, Material, PermintaanMaterial, PermintaanMaterialItem, SuratJalan, SuratJalanItem, TandaTerimaGudang, TandaTerimaGudangItem, BarangKeluar, BarangKeluarItem, InventarisLapangan } = sequelize.models;
+      const { HousingUnit, Project, ProjectUnit, WorkLog, WorkLogPhoto, InventoryLog, TimeScheduleItem, QcSubmission, QcSubmissionResult, Akad, Bast, Ppjb, PindahUnit, Pembatalan, HousingPaymentHistory, Transaction, MarketingPerson, Consumer, Lead, QcTemplate, QcTemplateSection, QcTemplateItem, UnitStatus, ConstructionStatus, WorkLocation, AttendanceSetting, Attendance } = sequelize.models;
 
       await HousingUnit.update({ reserved_lead_id: null }, { where: { company_id: id }, transaction: t });
 
@@ -286,48 +286,6 @@ module.exports = {
           await QcSubmissionResult.destroy({ where: { submission_id: qcSubmissionIds }, transaction: t });
           await QcSubmission.destroy({ where: { id: qcSubmissionIds }, transaction: t });
         }
-      }
-
-      // SOP modules reset — hapus berdasarkan company_id agar semua data SOP ikut terhapus
-      // (diluar blok projectIds karena SOP bisa tanpa project)
-      if (PermintaanMaterial && PermintaanMaterialItem) {
-        const pms = await PermintaanMaterial.findAll({ where: { company_id: id }, transaction: t });
-        const pmIds = pms.map(x => x.id);
-        if (pmIds.length > 0) {
-          await PermintaanMaterialItem.destroy({ where: { permintaan_material_id: pmIds }, transaction: t });
-        }
-        await PermintaanMaterial.destroy({ where: { company_id: id }, transaction: t });
-      }
-
-      if (SuratJalan && SuratJalanItem) {
-        const sjs = await SuratJalan.findAll({ where: { company_id: id }, transaction: t });
-        const sjIds = sjs.map(x => x.id);
-        if (sjIds.length > 0) {
-          await SuratJalanItem.destroy({ where: { surat_jalan_id: sjIds }, transaction: t });
-        }
-        await SuratJalan.destroy({ where: { company_id: id }, transaction: t });
-      }
-
-      if (TandaTerimaGudang && TandaTerimaGudangItem) {
-        const tgs = await TandaTerimaGudang.findAll({ where: { company_id: id }, transaction: t });
-        const tgIds = tgs.map(x => x.id);
-        if (tgIds.length > 0) {
-          await TandaTerimaGudangItem.destroy({ where: { tanda_terima_gudang_id: tgIds }, transaction: t });
-        }
-        await TandaTerimaGudang.destroy({ where: { company_id: id }, transaction: t });
-      }
-
-      if (BarangKeluar && BarangKeluarItem) {
-        const bks = await BarangKeluar.findAll({ where: { company_id: id }, transaction: t });
-        const bkIds = bks.map(x => x.id);
-        if (bkIds.length > 0) {
-          await BarangKeluarItem.destroy({ where: { barang_keluar_id: bkIds }, transaction: t });
-        }
-        await BarangKeluar.destroy({ where: { company_id: id }, transaction: t });
-      }
-
-      if (InventarisLapangan) {
-        await InventarisLapangan.destroy({ where: { company_id: id }, transaction: t });
       }
 
       await Akad.destroy({ where: { company_id: id }, transaction: t });
@@ -382,18 +340,8 @@ module.exports = {
       await MarketingPerson.destroy({ where: { company_id: id }, transaction: t });
       
       // Menghapus data absensi & lokasi kerja (Operational HR)
-      if (Attendance && User) {
-        const users = await User.findAll({ where: { company_id: id }, attributes: ['id'], transaction: t });
-        const userIds = users.map(u => u.id);
-        if (userIds.length > 0) {
-          await Attendance.destroy({ where: { user_id: userIds }, transaction: t });
-        }
-      }
+      if (Attendance) await Attendance.destroy({ where: { company_id: id }, transaction: t });
       if (WorkLocation) await WorkLocation.destroy({ where: { company_id: id }, transaction: t });
-
-      // Menghapus departemen dan material (Data Master Baru)
-      if (Department) await Department.destroy({ where: { company_id: id }, transaction: t });
-      if (Material) await Material.destroy({ where: { company_id: id }, transaction: t });
 
       // Terakhir hapus Project sebagai induk
       await Project.destroy({ where: { company_id: id }, transaction: t });
