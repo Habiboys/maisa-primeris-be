@@ -13,14 +13,28 @@ const allowedOrigins = [
   'https://maisa-primeris-fe.vercel.app',
 ].filter(Boolean);
 
+const allowedOriginPatterns = [
+  /^https:\/\/maisa-primeris-fe\.vercel\.app$/,
+  /^http:\/\/localhost:\d+$/,
+  /^http:\/\/127\.0\.0\.1:\d+$/,
+];
+
+function isAllowedOrigin(origin) {
+  if (!origin) return true;
+  if (allowedOrigins.includes(origin)) return true;
+  return allowedOriginPatterns.some((pattern) => pattern.test(origin));
+}
+
 const corsOptions = {
   origin(origin, callback) {
     // allow server-to-server calls / curl / postman (no origin)
-    if (!origin) return callback(null, true);
-    if (allowedOrigins.includes(origin)) return callback(null, true);
-    return callback(new Error('Not allowed by CORS'));
+    if (isAllowedOrigin(origin)) return callback(null, true);
+    return callback(null, false);
   },
   credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Tenant-Id'],
+  optionsSuccessStatus: 204,
 };
 
 // ── Middleware ──────────────────────────────────────────────
@@ -33,7 +47,7 @@ app.use(httpLogger);
 // Static uploads
 app.use('/uploads', (req, res, next) => {
   const origin = req.headers.origin;
-  if (origin && allowedOrigins.includes(origin)) {
+  if (origin && isAllowedOrigin(origin)) {
     res.setHeader('Access-Control-Allow-Origin', origin);
     res.setHeader('Vary', 'Origin');
   }
