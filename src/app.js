@@ -8,33 +8,38 @@ const routes = require('./routes');
 const { captureResponseBody, httpLogger } = require('./middlewares/http-logger.middleware');
 const app = express();
 
-const allowedOrigins = [
-  process.env.FRONTEND_URL,
-  'https://maisa-primeris-fe.vercel.app',
-].filter(Boolean);
+const normalizeOrigin = (value) => String(value || '').trim().replace(/\/$/, '');
 
-const allowedOriginPatterns = [
-  /^https:\/\/maisa-primeris-fe\.vercel\.app$/,
-  /^http:\/\/localhost:\d+$/,
-  /^http:\/\/127\.0\.0\.1:\d+$/,
-];
+const allowedOrigins = new Set(
+  [
+    process.env.FRONTEND_URL,
+    'https://maisa-primeris-fe.vercel.app',
+  ]
+    .filter(Boolean)
+    .map(normalizeOrigin),
+);
 
-function isAllowedOrigin(origin) {
+const isAllowedOrigin = (origin) => {
   if (!origin) return true;
-  if (allowedOrigins.includes(origin)) return true;
-  return allowedOriginPatterns.some((pattern) => pattern.test(origin));
-}
+  const normalized = normalizeOrigin(origin);
+
+  if (allowedOrigins.has(normalized)) return true;
+
+  // support Vercel preview deployments
+  return /^https:\/\/maisa-primeris-fe.*\.vercel\.app$/i.test(normalized);
+};
 
 const corsOptions = {
   origin(origin, callback) {
     // allow server-to-server calls / curl / postman (no origin)
     if (isAllowedOrigin(origin)) return callback(null, true);
+
+    // do not throw error to avoid breaking requests unexpectedly
     return callback(null, false);
   },
   credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  methods: ['GET', 'HEAD', 'PUT', 'PATCH', 'POST', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Tenant-Id'],
-  optionsSuccessStatus: 204,
 };
 
 // ── Middleware ──────────────────────────────────────────────
@@ -52,7 +57,8 @@ app.use('/uploads', (req, res, next) => {
     res.setHeader('Vary', 'Origin');
   }
   res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Tenant-Id');
+  if (req.method === 'OPTIONS') return res.sendStatus(204);
   next();
 });
 app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
