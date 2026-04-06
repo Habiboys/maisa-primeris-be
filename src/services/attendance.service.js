@@ -250,16 +250,32 @@ module.exports = {
   // ── Leave Requests ─────────────────────────────────────────────
 
   listLeaveRequests: async ({ page, limit, status, type, user_id, search, start_date, end_date, date } = {}, actor) => {
+    // Helper to validate and parse YYYY-MM-DD date format
+    const isValidDate = (dateStr) => {
+      if (!dateStr || typeof dateStr !== 'string') return false;
+      const regex = /^\d{4}-\d{2}-\d{2}$/;
+      if (!regex.test(dateStr)) return false;
+      const d = new Date(dateStr);
+      return d instanceof Date && !isNaN(d) && d.toISOString().startsWith(dateStr);
+    };
+
     const where = {};
     if (status) where.status = status;
     if (type) where.type = type;
     if (user_id) where.user_id = user_id;
     if (date) {
+      if (!isValidDate(date)) throw { message: 'Format tanggal tidak valid. Gunakan format YYYY-MM-DD', status: 400 };
       where.start_date = { [Op.lte]: date };
       where.end_date = { [Op.gte]: date };
     } else {
-      if (start_date) where.end_date = { ...(where.end_date || {}), [Op.gte]: start_date };
-      if (end_date) where.start_date = { ...(where.start_date || {}), [Op.lte]: end_date };
+      if (start_date) {
+        if (!isValidDate(start_date)) throw { message: 'Format start_date tidak valid. Gunakan format YYYY-MM-DD', status: 400 };
+        where.end_date = { ...(where.end_date || {}), [Op.gte]: start_date };
+      }
+      if (end_date) {
+        if (!isValidDate(end_date)) throw { message: 'Format end_date tidak valid. Gunakan format YYYY-MM-DD', status: 400 };
+        where.start_date = { ...(where.start_date || {}), [Op.lte]: end_date };
+      }
     }
 
     const userWhere = search
