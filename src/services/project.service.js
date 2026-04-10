@@ -10,6 +10,7 @@ const {
   QcTemplate,
   TimeScheduleItem,
   InventoryLog,
+  Material,
   WorkLog,
   WorkLogPhoto,
   HousingUnit,
@@ -30,6 +31,15 @@ const ensureUploadDir = (dir) => {
   if (!fs.existsSync(dir)) {
     fs.mkdirSync(dir, { recursive: true });
   }
+};
+
+const serializeInventoryLog = (log) => {
+  const row = typeof log?.toJSON === 'function' ? log.toJSON() : log;
+  return {
+    ...row,
+    item: row?.material?.name ?? null,
+    unit_satuan: row?.material?.unit ?? null,
+  };
 };
 
 /**
@@ -464,23 +474,47 @@ module.exports = {
   // ── Inventory Logs ─────────────────────────────────────────
   listInventoryLogs: async (projectId, actor) => {
     await getScopedProject(projectId, actor);
-    return InventoryLog.findAll({ where: { project_id: projectId }, order: [["date", "DESC"], ["created_at", "DESC"]] });
+    const rows = await InventoryLog.findAll({
+      where: { project_id: projectId },
+      include: [{ model: Material, as: 'material', attributes: ['id', 'name', 'unit'] }],
+      order: [["date", "DESC"], ["created_at", "DESC"]],
+    });
+    return rows.map(serializeInventoryLog);
   },
 
   createInventoryLog: async (projectId, payload, userId, actor) => {
-    await getScopedProject(projectId, actor);
-    // Catatan:
-    // Schema inventory_logs masih menyimpan legacy field `item_name` (NOT NULL),
-    // sementara frontend kita mengirim field modern `item`.
-    // Supaya insertion tidak gagal, sinkronkan keduanya.
-    const item = payload?.item ?? payload?.item_name;
-    const safePayload = {
-      ...payload,
-      item,
-      // schema masih mewajibkan legacy `item_name`
-      item_name: payload?.item_name ?? item,
-    };
-    return InventoryLog.create({ ...safePayload, project_id: projectId, created_by: userId });
+    const project = await getScopedProject(projectId, actor);
+    if (!payload?.material_id) {
+      throw { message: 'material_id wajib diisi', status: 400 };
+    }
+
+    const material = await Material.findOne({
+      where: {
+        id: payload.material_id,
+        company_id: project.company_id,
+      },
+    });
+
+    if (!material) {
+      throw { message: 'Material tidak ditemukan untuk perusahaan ini', status: 404 };
+    }
+
+    const created = await InventoryLog.create({
+      project_id: projectId,
+      material_id: material.id,
+      unit_no: payload.unit_no,
+      date: payload.date,
+      qty: payload.qty,
+      person: payload.person,
+      type: payload.type,
+      notes: payload.notes,
+      created_by: userId,
+    });
+
+    const row = await InventoryLog.findByPk(created.id, {
+      include: [{ model: Material, as: 'material', attributes: ['id', 'name', 'unit'] }],
+    });
+    return serializeInventoryLog(row);
   },
 
   // ── Work Logs ──────────────────────────────────────────────

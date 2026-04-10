@@ -63,9 +63,8 @@ const timeScheduleSchema = Joi.object({
 const inventorySchema = Joi.object({
   unit_no: Joi.string().max(20).allow(null, ""),
   date: Joi.date().iso().required(),
-  item: Joi.string().max(200).required(),
+  material_id: Joi.string().uuid().required(),
   qty: Joi.number().precision(2).required(),
-  unit_satuan: Joi.string().max(30).allow(null, ""),
   person: Joi.string().max(100).allow(null, ""),
   type: Joi.string().valid("in", "out").required(),
   notes: Joi.string().allow(null, ""),

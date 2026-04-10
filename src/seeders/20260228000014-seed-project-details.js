@@ -19,7 +19,7 @@ module.exports = {
 
     // Projects
     const [projects] = await queryInterface.sequelize.query(
-      `SELECT id, name FROM projects ORDER BY name`
+      `SELECT id, name, company_id FROM projects ORDER BY name`
     );
     if (projects.length === 0) {
       console.log('⚠  Tidak ada project, skip seeder project-details.');
@@ -246,22 +246,62 @@ module.exports = {
      *  5. INVENTORY LOGS  (mutasi material)
      * ═══════════════════════════════════════ */
     const materials = [
-      { item: 'Semen Tiga Roda 50kg',     category: 'Bahan Bangunan', unit: 'Sak',    qtyRange: [10, 50] },
-      { item: 'Pasir Cor',                 category: 'Bahan Bangunan', unit: 'Kubik',  qtyRange: [2, 8] },
-      { item: 'Batu Split 2-3',            category: 'Bahan Bangunan', unit: 'Kubik',  qtyRange: [2, 6] },
-      { item: 'Besi Beton 10mm',           category: 'Besi & Baja',   unit: 'Batang', qtyRange: [20, 80] },
-      { item: 'Besi Beton 12mm',           category: 'Besi & Baja',   unit: 'Batang', qtyRange: [15, 60] },
-      { item: 'Kawat Bendrat',             category: 'Besi & Baja',   unit: 'Kg',     qtyRange: [5, 20] },
-      { item: 'Bata Merah Press',          category: 'Bahan Bangunan', unit: 'Buah',   qtyRange: [500, 2000] },
-      { item: 'Kayu Kaso 5/7',             category: 'Kayu',          unit: 'Batang', qtyRange: [20, 50] },
-      { item: 'Triplek 9mm',              category: 'Kayu',          unit: 'Lembar', qtyRange: [5, 15] },
-      { item: 'Pipa PVC 4"',              category: 'Plumbing',      unit: 'Batang', qtyRange: [5, 15] },
-      { item: 'Kabel NYM 3×2.5mm',        category: 'Listrik',       unit: 'Meter',  qtyRange: [50, 200] },
-      { item: 'Keramik 60×60 Putih',       category: 'Finishing',     unit: 'Dus',    qtyRange: [10, 30] },
-      { item: 'Cat Tembok 25kg Putih',     category: 'Finishing',     unit: 'Pail',   qtyRange: [3, 10] },
-      { item: 'Genteng Beton Flat',        category: 'Atap',          unit: 'Buah',   qtyRange: [100, 400] },
-      { item: 'Baja Ringan C75',           category: 'Atap',          unit: 'Batang', qtyRange: [15, 40] },
+      { name: 'Semen Tiga Roda 50kg', unit: 'Sak', qtyRange: [10, 50] },
+      { name: 'Pasir Cor', unit: 'Kubik', qtyRange: [2, 8] },
+      { name: 'Batu Split 2-3', unit: 'Kubik', qtyRange: [2, 6] },
+      { name: 'Besi Beton 10mm', unit: 'Batang', qtyRange: [20, 80] },
+      { name: 'Besi Beton 12mm', unit: 'Batang', qtyRange: [15, 60] },
+      { name: 'Kawat Bendrat', unit: 'Kg', qtyRange: [5, 20] },
+      { name: 'Bata Merah Press', unit: 'Buah', qtyRange: [500, 2000] },
+      { name: 'Kayu Kaso 5/7', unit: 'Batang', qtyRange: [20, 50] },
+      { name: 'Triplek 9mm', unit: 'Lembar', qtyRange: [5, 15] },
+      { name: 'Pipa PVC 4"', unit: 'Batang', qtyRange: [5, 15] },
+      { name: 'Kabel NYM 3×2.5mm', unit: 'Meter', qtyRange: [50, 200] },
+      { name: 'Keramik 60×60 Putih', unit: 'Dus', qtyRange: [10, 30] },
+      { name: 'Cat Tembok 25kg Putih', unit: 'Pail', qtyRange: [3, 10] },
+      { name: 'Genteng Beton Flat', unit: 'Buah', qtyRange: [100, 400] },
+      { name: 'Baja Ringan C75', unit: 'Batang', qtyRange: [15, 40] },
     ];
+
+    // Pastikan master material tersedia per company, lalu ambil map id-nya.
+    const companyIds = [...new Set([P1.company_id, P2.company_id].filter(Boolean))];
+    if (companyIds.length > 0) {
+      const inCompanies = companyIds.map((id) => `'${id}'`).join(',');
+      const [existingMaterials] = await queryInterface.sequelize.query(
+        `SELECT id, company_id, name FROM materials WHERE company_id IN (${inCompanies})`
+      );
+
+      const existingKeys = new Set(existingMaterials.map((m) => `${m.company_id}::${String(m.name).toLowerCase()}`));
+      const toInsert = [];
+      for (const companyId of companyIds) {
+        for (const m of materials) {
+          const key = `${companyId}::${m.name.toLowerCase()}`;
+          if (!existingKeys.has(key)) {
+            toInsert.push({
+              id: uuidv4(),
+              company_id: companyId,
+              name: m.name,
+              unit: m.unit,
+              notes: null,
+              created_at: now,
+              updated_at: now,
+            });
+            existingKeys.add(key);
+          }
+        }
+      }
+
+      if (toInsert.length > 0) {
+        await queryInterface.bulkInsert('materials', toInsert);
+      }
+    }
+
+    const [allMaterials] = await queryInterface.sequelize.query(
+      `SELECT id, company_id, name FROM materials`
+    );
+    const materialIdByCompanyAndName = new Map(
+      allMaterials.map((m) => [`${m.company_id}::${String(m.name).toLowerCase()}`, m.id])
+    );
 
     const inventoryLogs = [];
 
@@ -274,6 +314,7 @@ module.exports = {
       const masukCount = 8 + Math.floor(Math.random() * 5);
       for (let i = 0; i < masukCount; i++) {
         const mat = materials[i % materials.length];
+        const materialId = materialIdByCompanyAndName.get(`${proj.company_id}::${mat.name.toLowerCase()}`) || null;
         const daysAgo = Math.floor(Math.random() * daysSpread) + 1;
         const logDate = new Date(now);
         logDate.setDate(logDate.getDate() - daysAgo);
@@ -284,19 +325,11 @@ module.exports = {
         inventoryLogs.push({
           id: uuidv4(),
           project_id: proj.id,
-          item_name: mat.item,
-          item: mat.item,
-          category: mat.category,
-          unit: mat.unit,
-          unit_satuan: mat.unit,
+          material_id: materialId,
           unit_no: targetUnit?.no || 'main',
-          qty_in: qty,
-          qty_out: 0,
           qty: qty,
-          qty_balance: qty,
           type: 'in',
-          notes: `Pengiriman ${mat.item} oleh supplier`,
-          log_date: dateStr,
+          notes: `Pengiriman ${mat.name} oleh supplier`,
           date: dateStr,
           person: 'Admin Logistik',
           created_by: USER1,
@@ -309,6 +342,7 @@ module.exports = {
       const keluarCount = 5 + Math.floor(Math.random() * 4);
       for (let i = 0; i < keluarCount; i++) {
         const mat = materials[i % materials.length];
+        const materialId = materialIdByCompanyAndName.get(`${proj.company_id}::${mat.name.toLowerCase()}`) || null;
         const daysAgo = Math.floor(Math.random() * (daysSpread - 5)) + 1;
         const logDate = new Date(now);
         logDate.setDate(logDate.getDate() - daysAgo);
@@ -319,19 +353,11 @@ module.exports = {
         inventoryLogs.push({
           id: uuidv4(),
           project_id: proj.id,
-          item_name: mat.item,
-          item: mat.item,
-          category: mat.category,
-          unit: mat.unit,
-          unit_satuan: mat.unit,
+          material_id: materialId,
           unit_no: targetUnit?.no || 'main',
-          qty_in: 0,
-          qty_out: qty,
           qty: qty,
-          qty_balance: -qty,
           type: 'out',
           notes: `Dipakai untuk unit ${targetUnit?.no || 'umum'}`,
-          log_date: dateStr,
           date: dateStr,
           person: 'Mandor Lapangan',
           created_by: USER2 || USER1,

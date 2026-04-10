@@ -4,6 +4,7 @@ module.exports = (sequelize, DataTypes) => {
   class Material extends Model {
     static associate(models) {
       Material.belongsTo(models.Company, { foreignKey: 'company_id', as: 'company' });
+      Material.hasMany(models.InventoryLog, { foreignKey: 'material_id', as: 'inventoryLogs' });
     }
   }
   Material.init({
