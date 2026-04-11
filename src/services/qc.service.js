@@ -21,8 +21,16 @@ const fsp = fs.promises;
 const QC_UPLOAD_DIR = path.join(__dirname, "../../uploads/qc-submissions");
 
 const getBackendPublicBaseUrl = () => {
-  const explicit = process.env.BACKEND_PUBLIC_URL || process.env.BACKEND_URL;
-  if (explicit) return String(explicit).replace(/\/$/, "");
+  const explicit = process.env.BACKEND_URL;
+  if (explicit) {
+    const raw = String(explicit).trim().replace(/\/$/, "");
+    if (!raw) return raw;
+    if (/^https?:\/\//i.test(raw)) return raw;
+    if (/^localhost(?::\d+)?$/i.test(raw) || /^\d{1,3}(?:\.\d{1,3}){3}(?::\d+)?$/i.test(raw)) {
+      return `http://${raw}`;
+    }
+    return `https://${raw}`;
+  }
   const port = process.env.PORT || 3000;
   return `http://localhost:${port}`;
 };
@@ -32,6 +40,8 @@ const toPublicPhotoUrl = (photoUrl) => {
   const v = photoUrl.trim();
   if (!v) return null;
   if (/^https?:\/\//i.test(v)) return v;
+  if (/^\/\//.test(v)) return `https:${v}`;
+  if (/^[a-z0-9.-]+\.[a-z]{2,}(?:\/|$)/i.test(v)) return `https://${v}`;
   if (/^data:/i.test(v)) return null;
   if (v.startsWith("/")) return `${getBackendPublicBaseUrl()}${v}`;
   return `${getBackendPublicBaseUrl()}/${v}`;
