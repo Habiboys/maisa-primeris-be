@@ -1,5 +1,8 @@
 "use strict";
 
+const fs = require("fs");
+const path = require("path");
+const crypto = require("crypto");
 const { Op } = require("sequelize");
 const ExcelJS = require("exceljs");
 const {
@@ -13,6 +16,54 @@ const {
   ProjectUnit,
 } = require("../models");
 const { withTenantWhere, requireCompanyId } = require('../utils/tenant');
+
+const fsp = fs.promises;
+const QC_UPLOAD_DIR = path.join(__dirname, "../../uploads/qc-submissions");
+
+const getBackendPublicBaseUrl = () => {
+  const explicit = process.env.BACKEND_PUBLIC_URL || process.env.BACKEND_URL;
+  if (explicit) return String(explicit).replace(/\/$/, "");
+  const port = process.env.PORT || 3000;
+  return `http://localhost:${port}`;
+};
+
+const toPublicPhotoUrl = (photoUrl) => {
+  if (!photoUrl || typeof photoUrl !== "string") return null;
+  const v = photoUrl.trim();
+  if (!v) return null;
+  if (/^https?:\/\//i.test(v)) return v;
+  if (/^data:/i.test(v)) return null;
+  if (v.startsWith("/")) return `${getBackendPublicBaseUrl()}${v}`;
+  return `${getBackendPublicBaseUrl()}/${v}`;
+};
+
+const persistQcPhotoIfNeeded = async (photo) => {
+  if (!photo || typeof photo !== "string") return null;
+  const value = photo.trim();
+  if (!value) return null;
+
+  const m = value.match(/^data:(image\/[a-zA-Z0-9.+-]+);base64,(.+)$/s);
+  if (!m) return value;
+
+  const mime = m[1].toLowerCase();
+  const b64 = m[2];
+  const extMap = {
+    "image/jpeg": "jpg",
+    "image/jpg": "jpg",
+    "image/png": "png",
+    "image/webp": "webp",
+    "image/gif": "gif",
+  };
+  const ext = extMap[mime] || "jpg";
+
+  await fsp.mkdir(QC_UPLOAD_DIR, { recursive: true });
+
+  const filename = `qc-${Date.now()}-${crypto.randomBytes(5).toString("hex")}.${ext}`;
+  const absolute = path.join(QC_UPLOAD_DIR, filename);
+  await fsp.writeFile(absolute, Buffer.from(b64, "base64"));
+
+  return `/uploads/qc-submissions/${filename}`;
+};
 
 const templateOrder = [
   [{ model: QcTemplateSection, as: "sections" }, "order_index", "ASC"],
@@ -124,8 +175,13 @@ const buildQcWorkbook = (title, submissions = []) => {
         row.getCell(6).value = res?.updated_at || res?.created_at || "-";
 
         if (res?.photo_url) {
-          row.getCell(7).value = { text: "Lihat Gambar", hyperlink: res.photo_url };
-          row.getCell(7).font = { color: { argb: "FF2563EB" }, underline: true };
+          const link = toPublicPhotoUrl(res.photo_url);
+          if (link) {
+            row.getCell(7).value = { text: "Lihat Gambar", hyperlink: link };
+            row.getCell(7).font = { color: { argb: "FF2563EB" }, underline: true };
+          } else {
+            row.getCell(7).value = "Lihat di aplikasi";
+          }
         } else {
           row.getCell(7).value = "-";
         }
@@ -480,13 +536,13 @@ const svc = {
       );
 
       if (Array.isArray(payload.results) && payload.results.length) {
-        const rows = payload.results.map((r) => ({
+        const rows = await Promise.all(payload.results.map(async (r) => ({
           submission_id: submission.id,
           item_id: r.template_item_id || r.item_id,
           result: normalizeResult(r.result || r.status),
           notes: r.notes || r.remarks || null,
-          photo_url: r.photo_url || r.photo || null,
-        }));
+          photo_url: await persistQcPhotoIfNeeded(r.photo_url || r.photo || null),
+        })));
         await QcSubmissionResult.bulkCreate(rows, { transaction: t });
       }
 
@@ -528,13 +584,13 @@ const svc = {
       if (Array.isArray(payload.results)) {
         await QcSubmissionResult.destroy({ where: { submission_id: id }, transaction: t });
         if (payload.results.length) {
-          const rows = payload.results.map((r) => ({
+          const rows = await Promise.all(payload.results.map(async (r) => ({
             submission_id: submission.id,
             item_id: r.template_item_id || r.item_id,
             result: normalizeResult(r.result || r.status),
             notes: r.notes || r.remarks || null,
-            photo_url: r.photo_url || r.photo || null,
-          }));
+            photo_url: await persistQcPhotoIfNeeded(r.photo_url || r.photo || null),
+          })));
           await QcSubmissionResult.bulkCreate(rows, { transaction: t });
         }
 
