@@ -28,6 +28,7 @@ router.delete("/qc-templates/:id/sections/:sectionId/items/:itemId", requireSA, 
 
 // Submissions
 router.get("/qc-submissions", requireSAPM, ctrl.listSubmissions);
+router.get("/qc-submissions-export/project/:projectId", requireSAPM, ctrl.exportProjectSubmissions);
 router.get("/qc-submissions/:id", requireSAPM, ctrl.getSubmission);
 router.post("/qc-submissions", requireSAPM, ctrl.createSubmission);
 router.put("/qc-submissions/:id", requireSAPM, ctrl.updateSubmission);

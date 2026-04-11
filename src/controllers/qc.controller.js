@@ -249,7 +249,20 @@ module.exports = {
   exportSubmission: async (req, res) => {
     try {
       const r = await svc.exportSubmission(req.params.id, req.user);
-      return success(res, r, "Export submission QC");
+      res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+      res.setHeader("Content-Disposition", `attachment; filename="${encodeURIComponent(r.fileName)}"`);
+      return res.status(200).send(Buffer.from(r.buffer));
+    } catch (e) {
+      return error(res, e.message, e.status || 500);
+    }
+  },
+
+  exportProjectSubmissions: async (req, res) => {
+    try {
+      const r = await svc.exportProjectSubmissions(req.params.projectId, { unit_no: req.query.unit_no }, req.user);
+      res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+      res.setHeader("Content-Disposition", `attachment; filename="${encodeURIComponent(r.fileName)}"`);
+      return res.status(200).send(Buffer.from(r.buffer));
     } catch (e) {
       return error(res, e.message, e.status || 500);
     }

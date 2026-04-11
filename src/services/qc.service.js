@@ -1,6 +1,7 @@
 "use strict";
 
 const { Op } = require("sequelize");
+const ExcelJS = require("exceljs");
 const {
   sequelize,
   QcTemplate,
@@ -44,6 +45,120 @@ const findUnitByNo = async (projectId, unitNo) => {
   const where = { no: unitNo };
   if (projectId) where.project_id = projectId;
   return ProjectUnit.findOne({ where });
+};
+
+const sanitizeSheetName = (name = "Sheet") => {
+  const cleaned = String(name)
+    .replace(/[\\/*?:\[\]]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  return (cleaned || "Sheet").slice(0, 31);
+};
+
+const toYesNoMark = (result) => {
+  const r = (result || "").toString().toUpperCase();
+  if (r === "OK") return { yes: "✓", no: "" };
+  if (r === "NOT OK" || r === "NOT_OK") return { yes: "", no: "✓" };
+  return { yes: "", no: "" };
+};
+
+const buildQcWorkbook = (title, submissions = []) => {
+  const wb = new ExcelJS.Workbook();
+  wb.creator = "Maisa Primeris App";
+  wb.created = new Date();
+
+  const usedSheetNames = new Set();
+  submissions.forEach((sub, idx) => {
+    const rawName = `${sub.unit?.no || sub.unit_no || `Unit-${idx + 1}`}`;
+    let sheetName = sanitizeSheetName(rawName);
+    if (usedSheetNames.has(sheetName)) {
+      let i = 2;
+      while (usedSheetNames.has(sanitizeSheetName(`${rawName} (${i})`))) i += 1;
+      sheetName = sanitizeSheetName(`${rawName} (${i})`);
+    }
+    usedSheetNames.add(sheetName);
+    const ws = wb.addWorksheet(sheetName);
+
+    ws.mergeCells("A1:G1");
+    ws.getCell("A1").value = `Laporan QC ${sub.project?.name || ""} - Unit ${sub.unit?.no || sub.unit_no || "-"}`;
+    ws.getCell("A1").font = { bold: true, size: 13 };
+
+    ws.getCell("A2").value = "ID Submission";
+    ws.getCell("B2").value = sub.id;
+    ws.getCell("A3").value = "Tanggal QC";
+    ws.getCell("B3").value = sub.submission_date || "-";
+    ws.getCell("A4").value = "Status";
+    ws.getCell("B4").value = sub.status || "-";
+    ws.getCell("A5").value = "Template";
+    ws.getCell("B5").value = sub.template?.name || "-";
+    ws.getCell("A6").value = "Export";
+    ws.getCell("B6").value = `${title} • ${new Date().toLocaleString("id-ID")}`;
+
+    ["A2", "A3", "A4", "A5", "A6"].forEach((ref) => {
+      ws.getCell(ref).font = { bold: true };
+    });
+
+    let rowCursor = 8;
+    (sub.template?.sections || []).forEach((section) => {
+      ws.mergeCells(`A${rowCursor}:G${rowCursor}`);
+      ws.getCell(`A${rowCursor}`).value = section.name || "Section";
+      ws.getCell(`A${rowCursor}`).font = { bold: true, color: { argb: "FF1D4ED8" } };
+      rowCursor += 1;
+
+      ws.getRow(rowCursor).values = ["No", "Pertanyaan Checklist", "Yes", "No", "Catatan", "Last Update", "Gambar"];
+      ws.getRow(rowCursor).font = { bold: true };
+      ws.getRow(rowCursor).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFF3F4F6" } };
+      rowCursor += 1;
+
+      (section.items || []).forEach((item, itemIdx) => {
+        const res = (sub.results || []).find((r) => r.item_id === item.id || r.templateItem?.id === item.id);
+        const mark = toYesNoMark(res?.result);
+        const row = ws.getRow(rowCursor);
+        row.getCell(1).value = itemIdx + 1;
+        row.getCell(2).value = item.description || "-";
+        row.getCell(3).value = mark.yes;
+        row.getCell(3).alignment = { horizontal: "center", vertical: "middle" };
+        row.getCell(4).value = mark.no;
+        row.getCell(4).alignment = { horizontal: "center", vertical: "middle" };
+        row.getCell(5).value = res?.notes || "-";
+        row.getCell(6).value = res?.updated_at || res?.created_at || "-";
+
+        if (res?.photo_url) {
+          row.getCell(7).value = { text: "Lihat Gambar", hyperlink: res.photo_url };
+          row.getCell(7).font = { color: { argb: "FF2563EB" }, underline: true };
+        } else {
+          row.getCell(7).value = "-";
+        }
+        rowCursor += 1;
+      });
+
+      rowCursor += 1;
+    });
+
+    ws.columns = [
+      { width: 7 },
+      { width: 52 },
+      { width: 8 },
+      { width: 8 },
+      { width: 34 },
+      { width: 22 },
+      { width: 20 },
+    ];
+
+    for (let r = 8; r <= rowCursor; r += 1) {
+      ws.getRow(r).eachCell((cell) => {
+        cell.border = {
+          top: { style: "thin", color: { argb: "FFE5E7EB" } },
+          left: { style: "thin", color: { argb: "FFE5E7EB" } },
+          bottom: { style: "thin", color: { argb: "FFE5E7EB" } },
+          right: { style: "thin", color: { argb: "FFE5E7EB" } },
+        };
+        cell.alignment = { vertical: "top", wrapText: true };
+      });
+    }
+  });
+
+  return wb;
 };
 
 const svc = {
@@ -478,9 +593,55 @@ const svc = {
   },
 
   exportSubmission: async (id, actor) => {
-    // Stub export: return data so PDF layer can handle externally
     const submission = await svc.getSubmission(id, actor);
-    return { submission };
+    const wb = buildQcWorkbook(`QC - Unit ${submission.unit?.no || submission.unit_no || "-"}`, [submission]);
+    const buffer = await wb.xlsx.writeBuffer();
+    return {
+      buffer,
+      fileName: `qc-unit-${submission.unit?.no || submission.unit_no || "unknown"}-${submission.submission_date || "report"}.xlsx`,
+    };
+  },
+
+  exportProjectSubmissions: async (projectId, { unit_no } = {}, actor) => {
+    const project = await Project.findOne({ where: withTenantWhere({ id: projectId }, actor) });
+    if (!project) throw { message: "Proyek tidak ditemukan", status: 404 };
+
+    const list = await svc.listSubmissions({ project_id: projectId, unit_no }, actor);
+    if (!list.length) throw { message: "Data QC tidak ditemukan", status: 404 };
+
+    let selected = [];
+    if (unit_no) {
+      const latest = [...list].sort((a, b) => {
+        const sa = Math.max(new Date(a.submission_date || 0).getTime(), new Date(a.updated_at || 0).getTime(), new Date(a.created_at || 0).getTime());
+        const sb = Math.max(new Date(b.submission_date || 0).getTime(), new Date(b.updated_at || 0).getTime(), new Date(b.created_at || 0).getTime());
+        return sb - sa;
+      })[0];
+      selected = latest ? [latest] : [];
+    } else {
+      const latestPerUnit = new Map();
+      list.forEach((sub) => {
+        const key = sub.unit?.no || sub.unit_no;
+        if (!key) return;
+        const prev = latestPerUnit.get(key);
+        const score = Math.max(new Date(sub.submission_date || 0).getTime(), new Date(sub.updated_at || 0).getTime(), new Date(sub.created_at || 0).getTime());
+        const prevScore = prev
+          ? Math.max(new Date(prev.submission_date || 0).getTime(), new Date(prev.updated_at || 0).getTime(), new Date(prev.created_at || 0).getTime())
+          : -1;
+        if (!prev || score > prevScore) latestPerUnit.set(key, sub);
+      });
+      selected = Array.from(latestPerUnit.values()).sort((a, b) => (a.unit?.no || a.unit_no || "").localeCompare(b.unit?.no || b.unit_no || ""));
+    }
+
+    const detailed = await Promise.all(selected.map((s) => svc.getSubmission(s.id, actor)));
+    const title = unit_no ? `QC Unit ${unit_no} - ${project.name}` : `QC Semua Unit - ${project.name}`;
+    const wb = buildQcWorkbook(title, detailed);
+    const buffer = await wb.xlsx.writeBuffer();
+    return {
+      buffer,
+      fileName: unit_no
+        ? `qc-${project.name}-${unit_no}.xlsx`
+        : `qc-${project.name}-semua-unit.xlsx`,
+    };
   },
 };
 
