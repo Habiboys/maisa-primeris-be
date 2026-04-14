@@ -8,6 +8,9 @@ module.exports = (sequelize, DataTypes) => {
       Company.hasOne(models.CompanySetting, { foreignKey: 'company_id', as: 'settings' });
       Company.hasMany(models.Department, { foreignKey: 'company_id', as: 'departments', onDelete: 'CASCADE' });
       Company.hasMany(models.Material, { foreignKey: 'company_id', as: 'materials', onDelete: 'CASCADE' });
+      Company.hasMany(models.JobCategory, { foreignKey: 'company_id', as: 'jobCategories', onDelete: 'CASCADE' });
+      Company.hasMany(models.Logbook, { foreignKey: 'company_id', as: 'logbooks', onDelete: 'CASCADE' });
+      Company.hasMany(models.MeetingNote, { foreignKey: 'company_id', as: 'meetingNotes', onDelete: 'CASCADE' });
     }
   }
 

@@ -21,18 +21,18 @@ const upload = multer({
   storage,
   limits: { fileSize: 5 * 1024 * 1024 },
   fileFilter: (_req, file, cb) => {
-    const ok = /^image\/(jpeg|jpg|png)$/i.test(file.mimetype);
+    const ok = /^image\/(jpeg|jpg|png)$/i.test(file.mimetype) || /^application\/pdf$/i.test(file.mimetype);
     if (ok) cb(null, true);
-    else cb(new Error('Hanya file PNG, JPG, atau JPEG (max 5MB)'));
+    else cb(new Error('Hanya file PNG, JPG, JPEG, atau PDF (max 5MB)'));
   },
 });
 
 router.use(authenticate, ensureTenantContext);
 
 router.get   ('/housing',          SA,    ctrl.list);
-router.post  ('/housing',          SA,    upload.single('photo'), ctrl.create);
+router.post  ('/housing',          SA,    upload.fields([{ name: 'photo', maxCount: 1 }, { name: 'sertifikat_file', maxCount: 1 }]), ctrl.create);
 router.get   ('/housing/:id',      SA,    ctrl.getById);
-router.put   ('/housing/:id',      SA,    upload.single('photo'), ctrl.update);
+router.put   ('/housing/:id',      SA,    upload.fields([{ name: 'photo', maxCount: 1 }, { name: 'sertifikat_file', maxCount: 1 }]), ctrl.update);
 router.delete('/housing/:id',      SA,    ctrl.remove);
 
 router.get   ('/housing/:id/payments',          SA_FN, ctrl.listPayments);

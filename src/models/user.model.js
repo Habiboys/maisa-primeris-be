@@ -16,6 +16,9 @@ module.exports = (sequelize, DataTypes) => {
       User.hasMany(models.BarangKeluar,             { foreignKey: 'issued_by', as: 'barangKeluar' });
       User.hasMany(models.SuratJalan,               { foreignKey: 'issued_by', as: 'suratJalan' });
       User.hasMany(models.MarketingPerson,          { foreignKey: 'user_id', as: 'marketingProfile' });
+      User.hasMany(models.Logbook,                  { foreignKey: 'user_id', as: 'logbooks' });
+      User.hasMany(models.MeetingNote,              { foreignKey: 'created_by', as: 'meetingNotes' });
+      User.hasMany(models.MeetingAction,            { foreignKey: 'assigned_to', as: 'meetingActions' });
       User.belongsTo(models.WorkLocation,           { foreignKey: 'work_location_id', as: 'workLocation' });
       User.belongsTo(models.Company,                { foreignKey: 'company_id', as: 'company' });
     }
@@ -25,7 +28,7 @@ module.exports = (sequelize, DataTypes) => {
     name          : { type: DataTypes.STRING(100), allowNull: false },
     email         : { type: DataTypes.STRING(150), allowNull: false, unique: true },
     password      : { type: DataTypes.STRING(255), allowNull: false },
-    role          : { type: DataTypes.ENUM('Platform Owner','Super Admin','Finance','Project Management'), defaultValue: 'Finance' },
+    role          : { type: DataTypes.ENUM('Platform Owner','Super Admin','Finance','Project Management','Sekretaris'), defaultValue: 'Finance' },
     status        : { type: DataTypes.ENUM('Aktif','Nonaktif'), defaultValue: 'Aktif' },
     phone         : DataTypes.STRING(20),
     avatar        : DataTypes.STRING(255),

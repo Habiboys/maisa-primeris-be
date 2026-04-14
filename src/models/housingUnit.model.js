@@ -33,6 +33,7 @@ module.exports = (sequelize, DataTypes) => {
     serah_terima_date: DataTypes.DATEONLY,
     notes            : DataTypes.TEXT,
     photo_url        : DataTypes.STRING(255),
+    sertifikat_file_url: DataTypes.STRING(255),
   }, { sequelize, modelName: 'HousingUnit', tableName: 'housing_units', underscored: true });
   return HousingUnit;
 };

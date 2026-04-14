@@ -18,5 +18,6 @@ router.use('/dashboard',  require('./dashboard.routes'));    // /dashboard/*
 router.use('/',           require('./project.routes'));      // /projects + /construction-statuses + time-schedule + inventory + work-logs
 router.use('/payment-schemes', require('./paymentScheme.routes'));
 router.use('/',           require('./qc.routes'));           // /qc-templates + /qc-submissions
+router.use('/',           require('./logbookMeeting.routes')); // /logbooks + /job-categories + /meeting-notes
 
 module.exports = router;
