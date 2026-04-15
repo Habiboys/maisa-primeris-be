@@ -7,6 +7,7 @@ const multer = require('multer');
 const ctrl = require('../controllers/housing.controller');
 const { authenticate, authorize } = require('../middlewares/auth.middleware');
 const { ensureTenantContext } = require('../middlewares/tenant.middleware');
+const { enforceAndCompressUploadedImages } = require('../middlewares/image-upload.middleware');
 
 const SA = authorize('Super Admin', 'Finance');
 const SA_FN = authorize('Super Admin', 'Finance');
@@ -30,9 +31,9 @@ const upload = multer({
 router.use(authenticate, ensureTenantContext);
 
 router.get   ('/housing',          SA,    ctrl.list);
-router.post  ('/housing',          SA,    upload.fields([{ name: 'photo', maxCount: 1 }, { name: 'sertifikat_file', maxCount: 1 }]), ctrl.create);
+router.post  ('/housing',          SA,    upload.fields([{ name: 'photo', maxCount: 1 }, { name: 'sertifikat_file', maxCount: 1 }]), enforceAndCompressUploadedImages(), ctrl.create);
 router.get   ('/housing/:id',      SA,    ctrl.getById);
-router.put   ('/housing/:id',      SA,    upload.fields([{ name: 'photo', maxCount: 1 }, { name: 'sertifikat_file', maxCount: 1 }]), ctrl.update);
+router.put   ('/housing/:id',      SA,    upload.fields([{ name: 'photo', maxCount: 1 }, { name: 'sertifikat_file', maxCount: 1 }]), enforceAndCompressUploadedImages(), ctrl.update);
 router.delete('/housing/:id',      SA,    ctrl.remove);
 
 router.get   ('/housing/:id/payments',          SA_FN, ctrl.listPayments);

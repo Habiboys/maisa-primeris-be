@@ -6,6 +6,7 @@ const multer = require('multer');
 const router = require('express').Router();
 const ctrl = require('../controllers/companySetting.controller');
 const { authenticate, authorize } = require('../middlewares/auth.middleware');
+const { enforceAndCompressUploadedImages } = require('../middlewares/image-upload.middleware');
 
 const uploadDir = path.join(__dirname, '../../uploads/company-branding');
 if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
@@ -14,7 +15,14 @@ const storage = multer.diskStorage({
   destination: (_req, _file, cb) => cb(null, uploadDir),
   filename: (_req, file, cb) => cb(null, `${Date.now()}-${file.originalname.replace(/\s+/g, '_')}`),
 });
-const upload = multer({ storage });
+const upload = multer({
+  storage,
+  limits: { fileSize: 2 * 1024 * 1024, files: 2 },
+  fileFilter: (_req, file, cb) => {
+    if (/^image\//i.test(file.mimetype)) return cb(null, true);
+    return cb(new Error('Hanya file gambar yang diizinkan (maks 2MB)'));
+  },
+});
 const uploadBrandingFields = upload.fields([
   { name: 'logo', maxCount: 1 },
   { name: 'favicon', maxCount: 1 },
@@ -29,10 +37,10 @@ router.use(authenticate);
 router.use('/me', ensureTenantContext);  // /company-settings/me dan PUT /me butuh tenant context
 
 router.get('/me', ctrl.me);
-router.put('/me', SA_OR_PLATFORM, uploadBrandingFields, ctrl.updateMe);
+router.put('/me', SA_OR_PLATFORM, uploadBrandingFields, enforceAndCompressUploadedImages(), ctrl.updateMe);
 router.post('/me/reset', SA_OR_PLATFORM, ctrl.resetMyData);
 
 router.get('/company/:companyId', PLATFORM, ctrl.getByCompanyId);
-router.put('/company/:companyId', PLATFORM, uploadBrandingFields, ctrl.updateByCompanyId);
+router.put('/company/:companyId', PLATFORM, uploadBrandingFields, enforceAndCompressUploadedImages(), ctrl.updateByCompanyId);
 
 module.exports = router;

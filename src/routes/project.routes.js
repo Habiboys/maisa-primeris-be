@@ -7,6 +7,7 @@ const fs = require("fs");
 const ctrl = require("../controllers/project.controller");
 const { authenticate, authorize } = require("../middlewares/auth.middleware");
 const { ensureTenantContext } = require("../middlewares/tenant.middleware");
+const { enforceAndCompressUploadedImages } = require('../middlewares/image-upload.middleware');
 
 // Multer setup for work log photos
 const uploadDir = path.join(__dirname, "../../uploads/work-logs");
@@ -15,7 +16,14 @@ const storage = multer.diskStorage({
   destination: (_req, _file, cb) => cb(null, uploadDir),
   filename: (_req, file, cb) => cb(null, `${Date.now()}-${file.originalname.replace(/\s+/g, "-")}`),
 });
-const upload = multer({ storage });
+const upload = multer({
+  storage,
+  limits: { fileSize: 2 * 1024 * 1024, files: 10 },
+  fileFilter: (_req, file, cb) => {
+    if (/^image\/(jpeg|jpg|png|webp)$/i.test(file.mimetype)) return cb(null, true);
+    return cb(new Error('Hanya file gambar (JPG, PNG, WEBP) maksimal 2MB'));
+  },
+});
 
 // Multer setup for project layout SVG
 const layoutUploadDir = path.join(__dirname, "../../uploads/project-layouts");
@@ -33,7 +41,7 @@ const layoutUpload = multer({
       cb(new Error("Hanya file SVG yang diizinkan"));
     }
   },
-  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB max
+  limits: { fileSize: 2 * 1024 * 1024 },
 });
 
 // Guards (setiap request wajib punya tenant context untuk scope company_id)
@@ -77,12 +85,12 @@ router.post("/projects/:projectId/inventory", requirePM, ctrl.createInventoryLog
 
 // Work logs
 router.get("/projects/:projectId/work-logs", withTenant, ctrl.listWorkLogs);
-router.post("/projects/:projectId/work-logs", requirePM, upload.array("photos", 10), ctrl.createWorkLog);
+router.post("/projects/:projectId/work-logs", requirePM, upload.array("photos", 10), enforceAndCompressUploadedImages(), ctrl.createWorkLog);
 router.put("/projects/:projectId/work-logs/:logId", requirePM, ctrl.updateWorkLog);
 router.delete("/projects/:projectId/work-logs/:logId", requirePM, ctrl.deleteWorkLog);
 
 // Work log photos
 router.delete("/projects/:projectId/work-logs/:logId/photos/:photoId", requirePM, ctrl.deleteWorkLogPhoto);
-router.post("/projects/:projectId/work-logs/:logId/photos", requirePM, upload.array("photos", 10), ctrl.addWorkLogPhotos);
+router.post("/projects/:projectId/work-logs/:logId/photos", requirePM, upload.array("photos", 10), enforceAndCompressUploadedImages(), ctrl.addWorkLogPhotos);
 
 module.exports = router;

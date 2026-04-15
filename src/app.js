@@ -65,6 +65,15 @@ app.use((req, res) => {
 // ── Global Error Handler ─────────────────────────────────────
 app.use((err, req, res, _next) => {
   console.error(err.stack);
+
+  if (err?.name === 'MulterError') {
+    return res.status(400).json({
+      success: false,
+      message: 'Upload gagal',
+      error: err.message,
+    });
+  }
+
   res.status(err.status || 500).json({
     success: false,
     error: err.message || 'Internal Server Error',

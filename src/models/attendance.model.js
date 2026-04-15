@@ -18,8 +18,6 @@ module.exports = (sequelize, DataTypes) => {
     clock_in_lng    : DataTypes.DECIMAL(11,8),
     clock_out_lat   : DataTypes.DECIMAL(10,8),
     clock_out_lng   : DataTypes.DECIMAL(11,8),
-    clock_in_photo  : DataTypes.STRING(255),
-    clock_out_photo : DataTypes.STRING(255),
     status          : { type: DataTypes.ENUM('Hadir','Izin','Sakit','Alpha','Terlambat'), defaultValue: 'Hadir' },
     notes           : DataTypes.TEXT,
   }, { sequelize, modelName: 'Attendance', tableName: 'attendances', underscored: true });

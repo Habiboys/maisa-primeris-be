@@ -19,5 +19,6 @@ router.use('/',           require('./project.routes'));      // /projects + /con
 router.use('/payment-schemes', require('./paymentScheme.routes'));
 router.use('/',           require('./qc.routes'));           // /qc-templates + /qc-submissions
 router.use('/',           require('./logbookMeeting.routes')); // /logbooks + /job-categories + /meeting-notes
+router.use('/',           require('./media.routes'));        // /media
 
 module.exports = router;

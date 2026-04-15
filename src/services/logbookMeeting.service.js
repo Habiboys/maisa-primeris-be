@@ -89,12 +89,18 @@ const ensureDefaultJobCategories = async (actor) => {
   if (isPlatformOwner(actor) && !actor?.company_id) return;
   const companyId = requireCompanyId(actor);
 
-  const count = await JobCategory.count({ where: { company_id: companyId } });
-  if (count > 0) return;
-
-  await JobCategory.bulkCreate(
-    DEFAULT_JOB_CATEGORIES.map((name) => ({ company_id: companyId, name })),
-  );
+  try {
+    await JobCategory.bulkCreate(
+      DEFAULT_JOB_CATEGORIES.map((name) => ({ company_id: companyId, name })),
+      { ignoreDuplicates: true },
+    );
+  } catch (error) {
+    // Bisa terjadi saat request paralel pertama kali membuka halaman logbook.
+    // Abaikan unique/validation error agar endpoint list tetap aman.
+    if (error?.name !== 'SequelizeUniqueConstraintError' && error?.name !== 'SequelizeValidationError') {
+      throw error;
+    }
+  }
 };
 
 const ensureCategoryInTenant = async (jobCategoryId, actor, transaction) => {

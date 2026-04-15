@@ -23,8 +23,8 @@ module.exports = {
   // Attendances
   listAttendances  : async (req, res) => { try { const r = await svc.listAttendances(req.query, req.user);                      return res.json({ success:true, ...r, message:'Rekap absensi' }); } catch(e){ return error(res,e.message,e.status||500); } },
   myAttendances    : async (req, res) => { try { const r = await svc.getMyAttendances(req.user.id, req.user);                   return success(res,r,'Absensi saya'); }                           catch(e){ return error(res,e.message,e.status||500); } },
-  clockIn          : async (req, res) => { try { const r = await svc.clockIn(req.user.id, req.body, req.file, req.user);        return created(res,r,'Clock-in berhasil'); }                      catch(e){ return error(res,e.message,e.status||500); } },
-  clockOut         : async (req, res) => { try { const r = await svc.clockOut(req.user.id, req.body, req.file, req.user);       return success(res,r,'Clock-out berhasil'); }                     catch(e){ return error(res,e.message,e.status||500); } },
+  clockIn          : async (req, res) => { try { const r = await svc.clockIn(req.user.id, req.body, req.user);                  return created(res,r,'Clock-in berhasil'); }                      catch(e){ return error(res,e.message,e.status||500); } },
+  clockOut         : async (req, res) => { try { const r = await svc.clockOut(req.user.id, req.body, req.user);                 return success(res,r,'Clock-out berhasil'); }                     catch(e){ return error(res,e.message,e.status||500); } },
 
   // Leave Requests
   listLeaveRequests  : async (req, res) => { try { const r = await svc.listLeaveRequests(req.query, req.user);                  return res.json({ success:true, ...r, message:'Daftar pengajuan' }); } catch(e){ return error(res,e.message,e.status||500); } },

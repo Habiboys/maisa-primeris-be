@@ -16,6 +16,14 @@ const {
   ProjectUnit,
 } = require("../models");
 const { withTenantWhere, requireCompanyId } = require('../utils/tenant');
+const {
+  MAX_IMAGE_UPLOAD_BYTES,
+  TARGET_COMPRESSED_BYTES,
+  compressImageBuffer,
+  extByMime,
+  isCompressibleImageMime,
+  parseDataUrlImage,
+} = require('../utils/imageUpload');
 
 const fsp = fs.promises;
 const QC_UPLOAD_DIR = path.join(__dirname, "../../uploads/qc-submissions");
@@ -52,25 +60,25 @@ const persistQcPhotoIfNeeded = async (photo) => {
   const value = photo.trim();
   if (!value) return null;
 
-  const m = value.match(/^data:(image\/[a-zA-Z0-9.+-]+);base64,(.+)$/s);
-  if (!m) return value;
+  const parsed = parseDataUrlImage(value);
+  if (!parsed) return value;
 
-  const mime = m[1].toLowerCase();
-  const b64 = m[2];
-  const extMap = {
-    "image/jpeg": "jpg",
-    "image/jpg": "jpg",
-    "image/png": "png",
-    "image/webp": "webp",
-    "image/gif": "gif",
-  };
-  const ext = extMap[mime] || "jpg";
+  const mime = parsed.mime;
+  if (parsed.buffer.length > MAX_IMAGE_UPLOAD_BYTES) {
+    throw { message: 'Ukuran gambar maksimal 2MB', status: 400 };
+  }
+
+  const output = isCompressibleImageMime(mime)
+    ? await compressImageBuffer(parsed.buffer, mime, { maxBytes: TARGET_COMPRESSED_BYTES })
+    : { buffer: parsed.buffer, mime };
+
+  const ext = extByMime(output.mime);
 
   await fsp.mkdir(QC_UPLOAD_DIR, { recursive: true });
 
   const filename = `qc-${Date.now()}-${crypto.randomBytes(5).toString("hex")}.${ext}`;
   const absolute = path.join(QC_UPLOAD_DIR, filename);
-  await fsp.writeFile(absolute, Buffer.from(b64, "base64"));
+  await fsp.writeFile(absolute, output.buffer);
 
   return `/uploads/qc-submissions/${filename}`;
 };

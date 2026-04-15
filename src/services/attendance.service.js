@@ -160,7 +160,7 @@ module.exports = {
     limit: 30,
   }),
 
-  clockIn: async (userId, payload = {}, file = null, actor) => {
+  clockIn: async (userId, payload = {}, actor) => {
     const lat = Number(payload?.lat);
     const lng = Number(payload?.lng);
     if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
@@ -217,12 +217,11 @@ module.exports = {
       clock_in: time,
       clock_in_lat: lat,
       clock_in_lng: lng,
-      clock_in_photo: file ? `/uploads/attendance/${file.filename}` : null,
       status,
     });
   },
 
-  clockOut: async (userId, payload = {}, file = null, actor) => {
+  clockOut: async (userId, payload = {}, actor) => {
     const lat = Number(payload?.lat);
     const lng = Number(payload?.lng);
     if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
@@ -242,7 +241,6 @@ module.exports = {
       clock_out: time,
       clock_out_lat: lat,
       clock_out_lng: lng,
-      ...(file ? { clock_out_photo: `/uploads/attendance/${file.filename}` } : {}),
     });
     return att;
   },
