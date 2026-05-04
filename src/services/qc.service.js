@@ -568,10 +568,12 @@ const svc = {
       if (unit) {
         const normalized = (payload.results || []).map((r) => normalizeResult(r.result || r.status));
         const total = normalized.length;
-        const checkedCount = normalized.filter((r) => r !== null).length;
+        const naCount = normalized.filter((r) => r === 'N/A').length;
+        const okCount = normalized.filter((r) => r === 'OK').length;
         const failCount = normalized.filter((r) => r === 'Not OK').length;
-        const qc_readiness = total > 0 ? Math.round((checkedCount / total) * 100) : 0;
-        const qc_status = failCount > 0 ? 'Fail' : (checkedCount === total && total > 0 ? 'Pass' : 'Ongoing');
+        const effectiveTotal = total - naCount;
+        const qc_readiness = effectiveTotal > 0 ? Math.round(((okCount + failCount) / effectiveTotal) * 100) : 100;
+        const qc_status = failCount > 0 ? 'Fail' : (effectiveTotal === 0 ? 'Ongoing' : (okCount === effectiveTotal ? 'Pass' : 'Ongoing'));
         await ProjectUnit.update({ qc_readiness, qc_status }, { where: { id: unit.id }, transaction: t });
       }
 
@@ -616,10 +618,12 @@ const svc = {
         if (submission.unit_id) {
           const normalized = (payload.results || []).map((r) => normalizeResult(r.result || r.status));
           const total = normalized.length;
-          const checkedCount = normalized.filter((r) => r !== null).length;
+          const naCount = normalized.filter((r) => r === 'N/A').length;
+          const okCount = normalized.filter((r) => r === 'OK').length;
           const failCount = normalized.filter((r) => r === 'Not OK').length;
-          const qc_readiness = total > 0 ? Math.round((checkedCount / total) * 100) : 0;
-          const qc_status = failCount > 0 ? 'Fail' : (checkedCount === total && total > 0 ? 'Pass' : 'Ongoing');
+          const effectiveTotal = total - naCount;
+          const qc_readiness = effectiveTotal > 0 ? Math.round(((okCount + failCount) / effectiveTotal) * 100) : 100;
+          const qc_status = failCount > 0 ? 'Fail' : (effectiveTotal === 0 ? 'Ongoing' : (okCount === effectiveTotal ? 'Pass' : 'Ongoing'));
           await ProjectUnit.update(
             { qc_readiness, qc_status },
             { where: { id: submission.unit_id }, transaction: t }
@@ -645,10 +649,12 @@ const svc = {
       if (submission.unit_id) {
         const results = await QcSubmissionResult.findAll({ where: { submission_id: id }, transaction: t });
         const total = results.length;
-        const checkedCount = results.filter((r) => r.result !== null).length;
+        const naCount = results.filter((r) => r.result === 'N/A').length;
+        const okCount = results.filter((r) => r.result === 'OK').length;
         const failCount = results.filter((r) => r.result === 'Not OK').length;
-        const qc_readiness = total > 0 ? Math.round((checkedCount / total) * 100) : 0;
-        const qc_status = failCount > 0 ? 'Fail' : (checkedCount === total && total > 0 ? 'Pass' : 'Ongoing');
+        const effectiveTotal = total - naCount;
+        const qc_readiness = effectiveTotal > 0 ? Math.round(((okCount + failCount) / effectiveTotal) * 100) : 100;
+        const qc_status = failCount > 0 ? 'Fail' : (effectiveTotal === 0 ? 'Ongoing' : (okCount === effectiveTotal ? 'Pass' : 'Ongoing'));
         await ProjectUnit.update({ qc_readiness, qc_status }, { where: { id: submission.unit_id }, transaction: t });
       }
 
