@@ -8,8 +8,6 @@ const { MediaAsset } = require('../models');
 const { withTenantWhere, requireCompanyId, isPlatformOwner } = require('../utils/tenant');
 const {
   MAX_IMAGE_UPLOAD_BYTES,
-  TARGET_COMPRESSED_BYTES,
-  compressImageFileInPlace,
   isImageMime,
 } = require('../utils/imageUpload');
 
@@ -79,13 +77,9 @@ module.exports = {
       throw { message: 'Ukuran file maksimal 2MB', status: 400 };
     }
 
-    if (isImage) {
-      const compressed = await compressImageFileInPlace(absolute, file.mimetype, {
-        maxBytes: TARGET_COMPRESSED_BYTES,
-      });
-      file.size = compressed.bytes;
-      file.mimetype = compressed.mime;
-    }
+    // Catatan: kompresi gambar (jpeg/png/webp) sudah ditangani middleware
+    // `enforceAndCompressUploadedImages` sebelum sampai ke sini, jadi tidak
+    // perlu re-kompres — cuma boros waktu sharp pipeline (~1-2s).
 
     const { width, height } = isImage ? await getImageMeta(absolute) : { width: null, height: null };
     const companyId = isPlatformOwner(actor) ? (actor?.company_id || null) : requireCompanyId(actor);
