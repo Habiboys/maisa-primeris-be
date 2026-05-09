@@ -248,12 +248,21 @@ module.exports = {
         status: payload.status || 'Draft',
       }, { transaction: t });
 
-      if (files?.length) {
-        await LogbookFile.bulkCreate(files.map((file) => ({
-          logbook_id: logbook.id,
-          file_path: `/uploads/logbooks/${file.filename}`,
-          file_name: file.originalname,
-        })), { transaction: t });
+      const newFileRows = (files || []).map((file) => ({
+        logbook_id: logbook.id,
+        file_path: `/uploads/logbooks/${file.filename}`,
+        file_name: file.originalname,
+      }));
+      // Referensi ke media yang sudah ada di /uploads/media — tidak di-copy,
+      // langsung simpan path-nya supaya tidak ada duplikasi storage.
+      const refRows = (payload.media_refs || []).map((ref) => ({
+        logbook_id: logbook.id,
+        file_path: ref.file_path,
+        file_name: ref.file_name || null,
+      }));
+      const allRows = [...newFileRows, ...refRows];
+      if (allRows.length) {
+        await LogbookFile.bulkCreate(allRows, { transaction: t });
       }
 
       await t.commit();
@@ -318,9 +327,13 @@ module.exports = {
     const file = await LogbookFile.findOne({ where: { id: fileId, logbook_id: id } });
     if (!file) throw { message: 'File tidak ditemukan', status: 404 };
 
-    const absolutePath = path.join(__dirname, '../..', file.file_path);
-    if (fs.existsSync(absolutePath)) {
-      try { fs.unlinkSync(absolutePath); } catch (_e) { /* noop */ }
+    // Hanya hapus file fisik kalau di /uploads/logbooks/ (milik eksklusif logbook).
+    // File di /uploads/media/ adalah referensi bersama — biarkan, dihapus dari halaman Media.
+    if (file.file_path?.startsWith('/uploads/logbooks/')) {
+      const absolutePath = path.join(__dirname, '../..', file.file_path);
+      if (fs.existsSync(absolutePath)) {
+        try { fs.unlinkSync(absolutePath); } catch (_e) { /* noop */ }
+      }
     }
 
     await file.destroy();
@@ -335,6 +348,8 @@ module.exports = {
     if (!canManage(logbook.user_id, actor)) throw { message: 'Anda tidak punya akses untuk menghapus logbook ini', status: 403 };
 
     for (const file of (logbook.files || [])) {
+      // Sama seperti deleteLogbookFile — jangan hapus file media bersama.
+      if (!file.file_path?.startsWith('/uploads/logbooks/')) continue;
       const absolutePath = path.join(__dirname, '../..', file.file_path);
       if (fs.existsSync(absolutePath)) {
         try { fs.unlinkSync(absolutePath); } catch (_e) { /* noop */ }

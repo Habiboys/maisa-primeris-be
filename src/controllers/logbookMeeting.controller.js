@@ -4,12 +4,20 @@ const Joi = require('joi');
 const svc = require('../services/logbookMeeting.service');
 const { success, created, error } = require('../utils/response');
 
+const mediaRefSchema = Joi.object({
+  file_path: Joi.string().max(255).required(),
+  file_name: Joi.string().max(255).allow(null, ''),
+});
+
 const logbookCreateSchema = Joi.object({
   date: Joi.date().iso().required(),
   job_category_id: Joi.string().uuid().required(),
   description: Joi.string().required(),
   progress: Joi.number().integer().min(0).max(100).allow(null),
   status: Joi.string().valid('Draft', 'Submitted', 'Reviewed').allow(null, ''),
+  // Referensi ke file yang sudah ada di /uploads/media (dipilih dari Media picker).
+  // Diparse di controller karena multipart kirim sebagai JSON string.
+  media_refs: Joi.array().items(mediaRefSchema).max(20).optional(),
 });
 
 const logbookUpdateSchema = Joi.object({
@@ -83,10 +91,16 @@ module.exports = {
   },
 
   createLogbook: async (req, res) => {
-    const { error: vErr } = logbookCreateSchema.validate(req.body, { abortEarly: false, stripUnknown: true });
+    // multipart kirim media_refs sebagai JSON string — parse dulu agar Joi bisa validasi
+    const body = { ...req.body };
+    if (typeof body.media_refs === 'string') {
+      try { body.media_refs = JSON.parse(body.media_refs); }
+      catch { return error(res, 'media_refs tidak valid', 400); }
+    }
+    const { error: vErr, value } = logbookCreateSchema.validate(body, { abortEarly: false, stripUnknown: true });
     if (vErr) return error(res, 'Validasi gagal', 400, vErr.details.map((d) => d.message));
     try {
-      const r = await svc.createLogbook(req.body, req.files, req.user);
+      const r = await svc.createLogbook(value, req.files, req.user);
       return created(res, r, 'Logbook ditambahkan');
     } catch (e) {
       return error(res, e.message, e.status || 500);
