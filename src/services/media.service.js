@@ -70,12 +70,14 @@ module.exports = {
     if (!file) throw { message: 'File wajib diupload', status: 400 };
 
     const absolute = file.path;
-    if (isImageMime(file.mimetype) && Number(file.size || 0) > MAX_IMAGE_UPLOAD_BYTES) {
+    const isImage = isImageMime(file.mimetype);
+
+    if (Number(file.size || 0) > MAX_IMAGE_UPLOAD_BYTES) {
       safeDeleteFile(absolute);
-      throw { message: 'Ukuran gambar maksimal 2MB', status: 400 };
+      throw { message: 'Ukuran file maksimal 2MB', status: 400 };
     }
 
-    if (isImageMime(file.mimetype)) {
+    if (isImage) {
       const compressed = await compressImageFileInPlace(absolute, file.mimetype, {
         maxBytes: TARGET_COMPRESSED_BYTES,
       });
@@ -83,7 +85,7 @@ module.exports = {
       file.mimetype = compressed.mime;
     }
 
-    const { width, height } = await getImageMeta(absolute);
+    const { width, height } = isImage ? await getImageMeta(absolute) : { width: null, height: null };
     const companyId = isPlatformOwner(actor) ? (actor?.company_id || null) : requireCompanyId(actor);
 
     const row = await MediaAsset.create({

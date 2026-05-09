@@ -22,7 +22,8 @@ const upload = multer({
   limits: { fileSize: 2 * 1024 * 1024, files: 1 },
   fileFilter: (_req, file, cb) => {
     if (/^image\//i.test(file.mimetype)) return cb(null, true);
-    return cb(new Error('Hanya file gambar yang diizinkan (maks 2MB)'));
+    if (file.mimetype === 'application/pdf') return cb(null, true);
+    return cb(new Error('Hanya gambar atau PDF yang diizinkan (maks 2MB)'));
   },
 });
 
