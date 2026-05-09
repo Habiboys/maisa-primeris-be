@@ -7,6 +7,7 @@ const { success, created, error } = require('../utils/response');
 const querySchema = Joi.object({
   search: Joi.string().allow('', null),
   category: Joi.string().max(80).allow('', null),
+  type: Joi.string().valid('image', 'pdf').allow('', null),
   page: Joi.number().integer().min(1).allow(null),
   limit: Joi.number().integer().min(1).max(100).allow(null),
 });

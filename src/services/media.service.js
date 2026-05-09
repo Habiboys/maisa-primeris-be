@@ -47,7 +47,7 @@ const safeDeleteFile = (absolutePath) => {
 };
 
 module.exports = {
-  list: async ({ search, category, page, limit } = {}, actor) => {
+  list: async ({ search, category, type, page, limit } = {}, actor) => {
     const where = withTenantWhere({}, actor);
     if (search) {
       where[Op.or] = [
@@ -56,6 +56,8 @@ module.exports = {
       ];
     }
     if (category) where.category = category;
+    if (type === 'image') where.mime_type = { [Op.like]: 'image/%' };
+    else if (type === 'pdf') where.mime_type = 'application/pdf';
 
     const { count, rows } = await MediaAsset.findAndCountAll({
       where,
