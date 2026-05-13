@@ -4,6 +4,7 @@ const fs = require("fs");
 const path = require("path");
 const { Op } = require("sequelize");
 const {
+  sequelize,
   Project,
   ProjectUnit,
   ConstructionStatus,
@@ -171,37 +172,21 @@ const bulkCreateUnitsFromNos = async (projectId, nos, tipe, companyId) => {
       existingHousing = await HousingUnit.findOne({ where: { unit_code: no, company_id: companyId } });
     }
 
-    const wipePayload = {
-      project_id: projectId,
-      project_unit_id: unit.id,
-      unit_code: no,
-      unit_type: tipe || null,
-      status: "Tersedia",
-      notes: "",
-      consumer_id: null,
-      luas_tanah: null,
-      luas_bangunan: null,
-      harga_per_meter: null,
-      harga_jual: null,
-      daya_listrik: null,
-      panjang_kanan: null,
-      panjang_kiri: null,
-      lebar_depan: null,
-      lebar_belakang: null,
-      id_rumah: null,
-      no_sertifikat: null,
-      akad_date: null,
-      serah_terima_date: null,
-      photo_url: null,
-    };
-
     if (!existingHousing) {
       await HousingUnit.create({
         company_id: companyId,
-        ...wipePayload,
+        project_unit_id: unit.id,
+        unit_code: no,
+        unit_type: tipe || null,
+        status: "Tersedia",
       });
     } else {
-      await existingHousing.update(wipePayload);
+      // Relink ke project_unit baru tanpa menyentuh detail kavling.
+      await existingHousing.update({
+        project_unit_id: unit.id,
+        unit_code: no,
+        unit_type: tipe || null,
+      });
     }
 
     created.push(unit);
@@ -374,8 +359,27 @@ module.exports = {
   },
 
   createUnit: async (projectId, payload, actor) => {
-    await getScopedProject(projectId, actor);
-    const unit = await ProjectUnit.create({ ...payload, project_id: projectId });
+    const project = await getScopedProject(projectId, actor);
+    const unit = await sequelize.transaction(async (t) => {
+      const u = await ProjectUnit.create(
+        { ...payload, project_id: projectId },
+        { transaction: t }
+      );
+      const existing = await HousingUnit.findOne({
+        where: { project_unit_id: u.id, company_id: project.company_id },
+        transaction: t,
+      });
+      if (!existing) {
+        await HousingUnit.create({
+          company_id: project.company_id,
+          project_unit_id: u.id,
+          unit_code: u.no,
+          unit_type: u.tipe ?? null,
+          status: 'Tersedia',
+        }, { transaction: t });
+      }
+      return u;
+    });
     await recalculateProjectProgress(projectId);
     return unit;
   },
