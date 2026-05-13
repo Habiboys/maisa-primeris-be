@@ -9,9 +9,15 @@ const { v4: uuidv4 } = require('uuid');
 
 module.exports = {
   async up(queryInterface, Sequelize) {
-    // Ambil housing_units yang sudah di-seed (status Proses & Sold pasti punya pembayaran)
+    // Ambil housing_units yang sudah di-seed (status Proses & Sold pasti punya pembayaran).
+    // unit_code sekarang ada di project_units, jadi join.
     const units = await queryInterface.sequelize.query(
-      `SELECT id, unit_code, status FROM housing_units WHERE status IN ('Proses', 'Sold') ORDER BY unit_code ASC LIMIT 10`,
+      `SELECT h.id, p.no AS unit_code, h.status
+         FROM housing_units h
+         JOIN project_units p ON p.id = h.project_unit_id
+        WHERE h.status IN ('Proses', 'Sold')
+        ORDER BY p.no ASC
+        LIMIT 10`,
       { type: Sequelize.QueryTypes.SELECT }
     );
 

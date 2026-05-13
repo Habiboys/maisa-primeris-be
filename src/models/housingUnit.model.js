@@ -12,10 +12,8 @@ module.exports = (sequelize, DataTypes) => {
   }
   HousingUnit.init({
     id               : { type: DataTypes.UUID, defaultValue: DataTypes.UUIDV4, primaryKey: true },
-    unit_code        : { type: DataTypes.STRING(50), allowNull: false, unique: true },
     company_id       : DataTypes.UUID,
-    project_unit_id  : DataTypes.UUID,
-    unit_type        : DataTypes.STRING(80),
+    project_unit_id  : { type: DataTypes.UUID, allowNull: false, unique: true },
     id_rumah         : DataTypes.STRING(50),
     no_sertifikat    : DataTypes.STRING(100),
     panjang_kanan    : DataTypes.DECIMAL(8, 2),

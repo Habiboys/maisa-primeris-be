@@ -71,7 +71,13 @@ module.exports = {
     const housingInclude = {
       model: HousingUnit,
       as: 'housingUnit',
-      attributes: ['id', 'unit_code', 'unit_type', 'harga_jual', [sequelize.literal('`housingUnit->projectUnit`.`project_id`'), 'project_id']],
+      attributes: [
+        'id',
+        'harga_jual',
+        [sequelize.literal('`housingUnit->projectUnit`.`project_id`'), 'project_id'],
+        [sequelize.literal('`housingUnit->projectUnit`.`no`'), 'unit_code'],
+        [sequelize.literal('`housingUnit->projectUnit`.`tipe`'), 'unit_type'],
+      ],
       required: false,
       include: []
     };
@@ -108,10 +114,16 @@ module.exports = {
       where: { id },
       include: [
         { model: MarketingPerson, as: 'marketingPerson', attributes: ['id', 'name'], where: withTenantWhere({}, actor), required: true },
-        { 
-          model: HousingUnit, 
-          as: 'housingUnit', 
-          attributes: ['id', 'unit_code', 'unit_type', 'harga_jual', [sequelize.literal('`housingUnit->projectUnit`.`project_id`'), 'project_id']], 
+        {
+          model: HousingUnit,
+          as: 'housingUnit',
+          attributes: [
+            'id',
+            'harga_jual',
+            [sequelize.literal('`housingUnit->projectUnit`.`project_id`'), 'project_id'],
+            [sequelize.literal('`housingUnit->projectUnit`.`no`'), 'unit_code'],
+            [sequelize.literal('`housingUnit->projectUnit`.`tipe`'), 'unit_type'],
+          ],
           required: false,
           include: [{ model: sequelize.models.ProjectUnit, as: 'projectUnit', attributes: [] }]
         },

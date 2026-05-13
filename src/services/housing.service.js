@@ -17,6 +17,9 @@ const numOrNull = (v) => {
 
 function normalizeHousingPayload(payload) {
   const p = { ...payload };
+  // unit_code & unit_type sekarang derivative dari project_units (tidak lagi tersimpan di housing_units).
+  delete p.unit_code;
+  delete p.unit_type;
   if (p.luas_tanah !== undefined) p.luas_tanah = numOrNull(p.luas_tanah);
   if (p.luas_bangunan !== undefined) p.luas_bangunan = numOrNull(p.luas_bangunan);
   if (p.harga_jual !== undefined) p.harga_jual = numOrNull(p.harga_jual);
@@ -43,27 +46,38 @@ module.exports = {
 
   list: async ({ status, tipe, search, project_id, page, limit } = {}, actor) => {
     const where = withTenantWhere({}, actor);
-    if (status) where.status    = status;
-    if (tipe)   where.unit_type = tipe;
-    if (search) where[Op.or]    = [
-      { unit_code: { [Op.like]: `%${search}%` } },
-      { unit_type: { [Op.like]: `%${search}%` } },
+    if (status) where.status = status;
+
+    const projectUnitWhere = {};
+    if (tipe) projectUnitWhere.tipe = tipe;
+    if (project_id) projectUnitWhere.project_id = project_id;
+    if (search) projectUnitWhere[Op.or] = [
+      { no: { [Op.like]: `%${search}%` } },
+      { tipe: { [Op.like]: `%${search}%` } },
     ];
 
     const include = [
       { model: Consumer, as: 'consumer', attributes: ['id', 'name', 'phone'] },
-      { model: ProjectUnit, as: 'projectUnit', attributes: [] }
+      {
+        model: ProjectUnit,
+        as: 'projectUnit',
+        attributes: [],
+        where: Object.keys(projectUnitWhere).length ? projectUnitWhere : undefined,
+        required: Object.keys(projectUnitWhere).length > 0,
+      },
     ];
-    if (project_id) {
-      include[1].where = { project_id };
-      include[1].required = true;
-    }
 
     const { count, rows } = await HousingUnit.findAndCountAll({
       where,
-      attributes: { include: [[sequelize.col('projectUnit.project_id'), 'project_id']] },
+      attributes: {
+        include: [
+          [sequelize.col('projectUnit.project_id'), 'project_id'],
+          [sequelize.col('projectUnit.no'), 'unit_code'],
+          [sequelize.col('projectUnit.tipe'), 'unit_type'],
+        ],
+      },
       include,
-      order: [['unit_code', 'ASC']],
+      order: [[sequelize.col('projectUnit.no'), 'ASC']],
       ...paginate(page, limit),
     });
     return { data: rows, pagination: mkPagination(count, page, limit) };
@@ -72,7 +86,13 @@ module.exports = {
   getById: async (id, actor) => {
     const u = await HousingUnit.findOne({
       where: withTenantWhere({ id }, actor),
-      attributes: { include: [[sequelize.col('projectUnit.project_id'), 'project_id']] },
+      attributes: {
+        include: [
+          [sequelize.col('projectUnit.project_id'), 'project_id'],
+          [sequelize.col('projectUnit.no'), 'unit_code'],
+          [sequelize.col('projectUnit.tipe'), 'unit_type'],
+        ],
+      },
       include: [
         { model: ProjectUnit, as: 'projectUnit', attributes: [] },
         { model: Consumer, as: 'consumer', attributes: ['id', 'name', 'phone', 'email'] },

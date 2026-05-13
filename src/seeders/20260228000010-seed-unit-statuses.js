@@ -12,9 +12,12 @@ module.exports = {
     const companyId = await getDefaultCompanyId(queryInterface);
     const now = new Date();
 
-    // Ambil housing_units yang sudah di-seed untuk mapping ke housing_unit_id
+    // unit_code sekarang ada di project_units (via project_unit_id), jadi join.
     const [housingUnits] = await queryInterface.sequelize.query(
-      'SELECT id, unit_code FROM housing_units ORDER BY unit_code ASC'
+      `SELECT h.id, p.no AS unit_code
+         FROM housing_units h
+         JOIN project_units p ON p.id = h.project_unit_id
+        ORDER BY p.no ASC`
     );
     const findHousingId = (code) => {
       const found = housingUnits.find((u) => u.unit_code === code);

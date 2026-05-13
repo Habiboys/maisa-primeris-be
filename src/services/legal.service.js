@@ -47,22 +47,39 @@ const searchWhere = (search, fields) => search
 // ── Generic CRUD helpers ──────────────────────────────────────────
 
 const consumerInclude = { model: Consumer, as: 'consumer', attributes: ['id', 'name', 'nik', 'phone', 'email'] };
-const housingInclude  = { 
-  model: HousingUnit, 
-  as: 'housingUnit', 
-  attributes: ['id', 'unit_code', 'unit_type', 'luas_tanah', 'luas_bangunan', [sequelize.literal('`housingUnit->projectUnit`.`project_id`'), 'project_id']],
+const housingInclude  = {
+  model: HousingUnit,
+  as: 'housingUnit',
+  attributes: [
+    'id',
+    'luas_tanah',
+    'luas_bangunan',
+    [sequelize.literal('`housingUnit->projectUnit`.`project_id`'), 'project_id'],
+    [sequelize.literal('`housingUnit->projectUnit`.`no`'), 'unit_code'],
+    [sequelize.literal('`housingUnit->projectUnit`.`tipe`'), 'unit_type'],
+  ],
   include: [{ model: sequelize.models.ProjectUnit, as: 'projectUnit', attributes: [] }]
 };
-const housingUnitLamaInclude = { 
-  model: HousingUnit, 
-  as: 'housingUnitLama', 
-  attributes: ['id', 'unit_code', 'unit_type', [sequelize.literal('`housingUnitLama->projectUnit`.`project_id`'), 'project_id']],
+const housingUnitLamaInclude = {
+  model: HousingUnit,
+  as: 'housingUnitLama',
+  attributes: [
+    'id',
+    [sequelize.literal('`housingUnitLama->projectUnit`.`project_id`'), 'project_id'],
+    [sequelize.literal('`housingUnitLama->projectUnit`.`no`'), 'unit_code'],
+    [sequelize.literal('`housingUnitLama->projectUnit`.`tipe`'), 'unit_type'],
+  ],
   include: [{ model: sequelize.models.ProjectUnit, as: 'projectUnit', attributes: [] }]
 };
-const housingUnitBaruInclude = { 
-  model: HousingUnit, 
-  as: 'housingUnitBaru', 
-  attributes: ['id', 'unit_code', 'unit_type', [sequelize.literal('`housingUnitBaru->projectUnit`.`project_id`'), 'project_id']],
+const housingUnitBaruInclude = {
+  model: HousingUnit,
+  as: 'housingUnitBaru',
+  attributes: [
+    'id',
+    [sequelize.literal('`housingUnitBaru->projectUnit`.`project_id`'), 'project_id'],
+    [sequelize.literal('`housingUnitBaru->projectUnit`.`no`'), 'unit_code'],
+    [sequelize.literal('`housingUnitBaru->projectUnit`.`tipe`'), 'unit_type'],
+  ],
   include: [{ model: sequelize.models.ProjectUnit, as: 'projectUnit', attributes: [] }]
 };
 

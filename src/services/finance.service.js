@@ -149,6 +149,7 @@ module.exports = {
 
       const unit = await HousingUnit.findOne({
         where: withTenantWhere({ id: lead.housing_unit_id }, actor),
+        include: [{ model: sequelize.models.ProjectUnit, as: 'projectUnit', attributes: ['id', 'no', 'tipe', 'project_id'] }],
         transaction: t,
       });
       if (!unit) throw { message: 'Unit kavling pada lead tidak ditemukan.', status: 404 };
@@ -173,8 +174,8 @@ module.exports = {
         email: lead.email || null,
         nik,
         address,
-        unit_code: unit.unit_code,
-        project_id: unit.project_id || lead.project_id || null,
+        unit_code: unit.projectUnit?.no ?? null,
+        project_id: unit.projectUnit?.project_id || lead.project_id || null,
         total_price: unit.harga_jual,
         payment_scheme,
         paid_amount: 0,

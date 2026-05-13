@@ -167,27 +167,16 @@ const bulkCreateUnitsFromNos = async (projectId, nos, tipe, companyId) => {
       qc_readiness: 0,
     });
 
-    let existingHousing = await HousingUnit.findOne({ where: { project_unit_id: unit.id, company_id: companyId } });
-    if (!existingHousing) {
-      existingHousing = await HousingUnit.findOne({ where: { unit_code: no, company_id: companyId } });
-    }
+    const existingHousing = await HousingUnit.findOne({ where: { project_unit_id: unit.id, company_id: companyId } });
 
     if (!existingHousing) {
       await HousingUnit.create({
         company_id: companyId,
         project_unit_id: unit.id,
-        unit_code: no,
-        unit_type: tipe || null,
         status: "Tersedia",
       });
-    } else {
-      // Relink ke project_unit baru tanpa menyentuh detail kavling.
-      await existingHousing.update({
-        project_unit_id: unit.id,
-        unit_code: no,
-        unit_type: tipe || null,
-      });
     }
+    // Kalau sudah ada (mestinya tidak, karena unit baru saja dibuat), biarkan apa adanya.
 
     created.push(unit);
   }
@@ -373,8 +362,6 @@ module.exports = {
         await HousingUnit.create({
           company_id: project.company_id,
           project_unit_id: u.id,
-          unit_code: u.no,
-          unit_type: u.tipe ?? null,
           status: 'Tersedia',
         }, { transaction: t });
       }

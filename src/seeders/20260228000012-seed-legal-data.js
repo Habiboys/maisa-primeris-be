@@ -23,7 +23,11 @@ module.exports = {
       `SELECT id, name, unit_code FROM consumers ORDER BY created_at LIMIT 5`
     );
     const [units] = await queryInterface.sequelize.query(
-      `SELECT id, unit_code FROM housing_units ORDER BY created_at LIMIT 10`
+      `SELECT h.id, p.no AS unit_code
+         FROM housing_units h
+         JOIN project_units p ON p.id = h.project_unit_id
+        ORDER BY h.created_at
+        LIMIT 10`
     );
 
     if (consumers.length < 3 || units.length < 5) {
